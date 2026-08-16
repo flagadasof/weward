@@ -15,6 +15,86 @@ type Profile = {
   flagged: boolean;
 };
 
+type RateLimitEntry = {
+  count: number;
+  resetAt: number;
+};
+
+/**
+ * Rate limit en mémoire.
+ *
+ * Limite : 30 recherches par minute et par IP.
+ *
+ * Cette protection est volontairement simple pour ne pas ajouter
+ * de service externe au projet.
+ */
+const RATE_LIMIT_MAX = 30;
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;
+
+const rateLimitStore = new Map<string, RateLimitEntry>();
+
+function getClientIp(request: NextRequest) {
+  const forwardedFor = request.headers.get("x-forwarded-for");
+
+  if (forwardedFor) {
+    return forwardedFor.split(",")[0].trim();
+  }
+
+  const realIp = request.headers.get("x-real-ip");
+
+  if (realIp) {
+    return realIp.trim();
+  }
+
+  return "unknown";
+}
+
+function checkRateLimit(ip: string) {
+  const now = Date.now();
+  const existing = rateLimitStore.get(ip);
+
+  if (!existing || existing.resetAt <= now) {
+    rateLimitStore.set(ip, {
+      count: 1,
+      resetAt: now + RATE_LIMIT_WINDOW_MS,
+    });
+
+    return {
+      allowed: true,
+      remaining: RATE_LIMIT_MAX - 1,
+      retryAfter: 0,
+    };
+  }
+
+  if (existing.count >= RATE_LIMIT_MAX) {
+    return {
+      allowed: false,
+      remaining: 0,
+      retryAfter: Math.ceil(
+        (existing.resetAt - now) / 1000,
+      ),
+    };
+  }
+
+  existing.count += 1;
+
+  return {
+    allowed: true,
+    remaining: RATE_LIMIT_MAX - existing.count,
+    retryAfter: 0,
+  };
+}
+
+function cleanupRateLimitStore() {
+  const now = Date.now();
+
+  for (const [ip, entry] of rateLimitStore.entries()) {
+    if (entry.resetAt <= now) {
+      rateLimitStore.delete(ip);
+    }
+  }
+}
+
 function getSupabaseAdmin() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -105,6 +185,29 @@ function calculateSimilarity(a: string, b: string) {
 }
 
 export async function GET(request: NextRequest) {
+  cleanupRateLimitStore();
+
+  const clientIp = getClientIp(request);
+  const rateLimit = checkRateLimit(clientIp);
+
+  if (!rateLimit.allowed) {
+    return NextResponse.json(
+      {
+        error:
+          "Trop de recherches. Veuillez patienter avant de réessayer.",
+      },
+      {
+        status: 429,
+        headers: {
+          "Cache-Control": "no-store",
+          "Retry-After": String(rateLimit.retryAfter),
+          "X-RateLimit-Limit": String(RATE_LIMIT_MAX),
+          "X-RateLimit-Remaining": "0",
+        },
+      },
+    );
+  }
+
   const query = request.nextUrl.searchParams.get("q")?.trim();
 
   if (!query) {
@@ -114,6 +217,13 @@ export async function GET(request: NextRequest) {
       },
       {
         status: 400,
+        headers: {
+          "Cache-Control": "no-store",
+          "X-RateLimit-Limit": String(RATE_LIMIT_MAX),
+          "X-RateLimit-Remaining": String(
+            rateLimit.remaining,
+          ),
+        },
       },
     );
   }
@@ -125,6 +235,13 @@ export async function GET(request: NextRequest) {
       },
       {
         status: 400,
+        headers: {
+          "Cache-Control": "no-store",
+          "X-RateLimit-Limit": String(RATE_LIMIT_MAX),
+          "X-RateLimit-Remaining": String(
+            rateLimit.remaining,
+          ),
+        },
       },
     );
   }
@@ -138,6 +255,13 @@ export async function GET(request: NextRequest) {
       },
       {
         status: 400,
+        headers: {
+          "Cache-Control": "no-store",
+          "X-RateLimit-Limit": String(RATE_LIMIT_MAX),
+          "X-RateLimit-Remaining": String(
+            rateLimit.remaining,
+          ),
+        },
       },
     );
   }
@@ -270,7 +394,6 @@ export async function GET(request: NextRequest) {
         "Erreur lors de la récupération des profils proches :",
         similarProfilesError,
       );
-
       return NextResponse.json(
         {
           error: "Impossible de récupérer les profils proches.",
@@ -379,6 +502,10 @@ export async function GET(request: NextRequest) {
     {
       headers: {
         "Cache-Control": "no-store",
+        "X-RateLimit-Limit": String(RATE_LIMIT_MAX),
+        "X-RateLimit-Remaining": String(
+          rateLimit.remaining,
+        ),
       },
     },
   );
