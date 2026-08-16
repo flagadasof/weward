@@ -186,17 +186,27 @@ export default function HomePage() {
       <main className="min-h-screen bg-slate-950 px-4 py-10 text-white">
         <div className="mx-auto w-full max-w-3xl">
           <section className="overflow-hidden rounded-3xl border border-slate-800 bg-slate-900 shadow-2xl">
-            <div className="px-6 py-10 text-center sm:px-10">
-              <div className="mb-3 text-sm font-semibold uppercase tracking-[0.3em] text-sky-400">
-                Vérification
-              </div>
+            <div className="px-6 py-8 text-center sm:px-10 sm:py-10">
+             <div
+  className="mx-auto w-full max-w-2xl"
+  style={{
+    maskImage:
+      "radial-gradient(ellipse 75% 90% at center, black 55%, transparent 100%)",
+    WebkitMaskImage:
+      "radial-gradient(ellipse 75% 90% at center, black 55%, transparent 100%)",
+  }}
+>
+  <img
+    src="/wardy-fbi.png"
+    alt="Wardy FBI - Faut balancer l'individu !"
+    className="mx-auto h-auto w-full object-contain"
+  />
+</div>
 
-              <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
-                Vérifier un profil
-              </h1>
+              
 
               <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-slate-400 sm:text-base">
-                Recherchez un nom ou un pseudo pour vérifier s&apos;il
+                Un doute sur un profil weward ? Entre un nom ou un pseudo pour vérifier s&apos;il
                 figure dans notre base de profils signalés.
               </p>
 
@@ -220,13 +230,15 @@ export default function HomePage() {
                   {loading ? "Vérification..." : "Vérifier"}
                 </button>
               </form>
-
+<p className="mt-5 text-sm text-slate-400">
+  Vous pensez qu’un profil devrait être signalé ?
+</p>
               <button
                 type="button"
                 onClick={openReportModal}
                 className="mt-5 text-sm font-medium text-red-400 underline-offset-4 transition hover:text-red-300 hover:underline"
               >
-                Signaler un profil
+              Par içi l'enquête !
               </button>
             </div>
 
@@ -455,7 +467,7 @@ export default function HomePage() {
                   onChange={(event) =>
                     setReportReason(event.target.value)
                   }
-                  placeholder="Expliquez pourquoi ce profil doit être signalé..."
+                  placeholder="Expliquez pourquoi ce profil doit être signalé... Tu peux ajouter ton mail ici si tu souhaites une réponse."
                   rows={5}
                   disabled={reportLoading}
                   className="w-full resize-none rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20 disabled:opacity-50"
