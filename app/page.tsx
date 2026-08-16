@@ -230,16 +230,31 @@ export default function HomePage() {
                   {loading ? "Vérification..." : "Vérifier"}
                 </button>
               </form>
+              <p className="mt-5 text-sm text-slate-400">
+  Vous pensez qu’un profil devrait être signalé ?
+  <br />
+  Envoyez-nous un mail à{" "}
+  <a
+    href="mailto:wardyfbi@gmail.com"
+    className="font-medium text-red-400 underline-offset-4 transition hover:text-red-300 hover:underline"
+  >
+    wardyfbi@gmail.com
+  </a>{" "}
+  avec vos preuves.
+</p>
+{/*
 <p className="mt-5 text-sm text-slate-400">
   Vous pensez qu’un profil devrait être signalé ?
 </p>
-              <button
-                type="button"
-                onClick={openReportModal}
-                className="mt-5 text-sm font-medium text-red-400 underline-offset-4 transition hover:text-red-300 hover:underline"
-              >
-              Par içi l'enquête !
-              </button>
+
+<button
+  type="button"
+  onClick={openReportModal}
+  className="mt-5 text-sm font-medium text-red-400 underline-offset-4 transition hover:text-red-300 hover:underline"
+>
+  Par içi l'enquête !
+</button>
+*/}
             </div>
 
             {result && (
@@ -312,11 +327,11 @@ export default function HomePage() {
                     <div className="text-3xl">✓</div>
 
                     <h2 className="mt-3 text-xl font-bold text-emerald-400">
-                      Aucun problème détecté
+                      Aucun problème détecté sur ce nom comme tu l'as orthographié
                     </h2>
 
                     <p className="mt-2 text-sm text-emerald-200">
-                      Pour le moment, aucun problème sur ce profil.
+                      Mais peut être une correspondance proche si tu regardes un peu plus bas...
                     </p>
                   </div>
                 )}
