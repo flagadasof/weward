@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-
-import { supabase } from "@/lib/supabase/client";
+import { createClient } from "@supabase/supabase-js";
 
 type Identifier = {
   id: string;
@@ -15,6 +14,24 @@ type Profile = {
   source_profile_id: string | null;
   flagged: boolean;
 };
+
+function getSupabaseAdmin() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error(
+      "Configuration Supabase serveur manquante.",
+    );
+  }
+
+  return createClient(supabaseUrl, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
+}
 
 function normalizeSearch(value: string) {
   return value
@@ -62,8 +79,13 @@ function calculateSimilarity(a: string, b: string) {
     return trigrams;
   };
 
-  createTrigrams(left).forEach((value) => leftTrigrams.add(value));
-  createTrigrams(right).forEach((value) => rightTrigrams.add(value));
+  createTrigrams(left).forEach((value) =>
+    leftTrigrams.add(value),
+  );
+
+  createTrigrams(right).forEach((value) =>
+    rightTrigrams.add(value),
+  );
 
   let intersection = 0;
 
@@ -96,6 +118,17 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  if (query.length > 100) {
+    return NextResponse.json(
+      {
+        error: "La recherche est trop longue.",
+      },
+      {
+        status: 400,
+      },
+    );
+  }
+
   const normalizedQuery = normalizeSearch(query);
 
   if (!normalizedQuery) {
@@ -109,12 +142,33 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const { data: identifiers, error: identifiersError } = await supabase
-    .from("profile_identifiers")
-    .select(
-      "id, profile_id, identifier_type, value, normalized_value",
-    )
-    .limit(1000);
+  let supabase;
+
+  try {
+    supabase = getSupabaseAdmin();
+  } catch (error) {
+    console.error(
+      "Configuration Supabase serveur invalide :",
+      error,
+    );
+
+    return NextResponse.json(
+      {
+        error: "Configuration serveur incorrecte.",
+      },
+      {
+        status: 500,
+      },
+    );
+  }
+
+  const { data: identifiers, error: identifiersError } =
+    await supabase
+      .from("profile_identifiers")
+      .select(
+        "id, profile_id, identifier_type, value, normalized_value",
+      )
+      .limit(1000);
 
   if (identifiersError) {
     console.error(
@@ -141,16 +195,19 @@ export async function GET(request: NextRequest) {
   );
 
   const exactProfileIds = [
-    ...new Set(exactMatches.map((identifier) => identifier.profile_id)),
+    ...new Set(
+      exactMatches.map((identifier) => identifier.profile_id),
+    ),
   ];
 
   let profiles: Profile[] = [];
 
   if (exactProfileIds.length > 0) {
-    const { data: profileData, error: profilesError } = await supabase
-      .from("reported_profiles")
-      .select("id, source_profile_id, flagged")
-      .in("id", exactProfileIds);
+    const { data: profileData, error: profilesError } =
+      await supabase
+        .from("reported_profiles")
+        .select("id, source_profile_id, flagged")
+        .in("id", exactProfileIds);
 
     if (profilesError) {
       console.error(
@@ -174,7 +231,10 @@ export async function GET(request: NextRequest) {
   const exactProfileIdSet = new Set(exactProfileIds);
 
   const similarIdentifiers = allIdentifiers
-    .filter((identifier) => !exactProfileIdSet.has(identifier.profile_id))
+    .filter(
+      (identifier) =>
+        !exactProfileIdSet.has(identifier.profile_id),
+    )
     .map((identifier) => ({
       identifier,
       similarity: calculateSimilarity(
@@ -188,18 +248,22 @@ export async function GET(request: NextRequest) {
 
   const similarProfileIds = [
     ...new Set(
-      similarIdentifiers.map((item) => item.identifier.profile_id),
+      similarIdentifiers.map(
+        (item) => item.identifier.profile_id,
+      ),
     ),
   ];
 
   let similarProfiles: Profile[] = [];
 
   if (similarProfileIds.length > 0) {
-    const { data: similarProfileData, error: similarProfilesError } =
-      await supabase
-        .from("reported_profiles")
-        .select("id, source_profile_id, flagged")
-        .in("id", similarProfileIds);
+    const {
+      data: similarProfileData,
+      error: similarProfilesError,
+    } = await supabase
+      .from("reported_profiles")
+      .select("id, source_profile_id, flagged")
+      .in("id", similarProfileIds);
 
     if (similarProfilesError) {
       console.error(
@@ -217,7 +281,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    similarProfiles = (similarProfileData ?? []) as Profile[];
+    similarProfiles = (similarProfileData ??
+      []) as Profile[];
   }
 
   const profileIdsToLoad = [
@@ -230,13 +295,15 @@ export async function GET(request: NextRequest) {
   let allProfileIdentifiers: Identifier[] = [];
 
   if (profileIdsToLoad.length > 0) {
-    const { data: profileIdentifiersData, error: profileIdentifiersError } =
-      await supabase
-        .from("profile_identifiers")
-        .select(
-          "id, profile_id, identifier_type, value, normalized_value",
-        )
-        .in("profile_id", profileIdsToLoad);
+    const {
+      data: profileIdentifiersData,
+      error: profileIdentifiersError,
+    } = await supabase
+      .from("profile_identifiers")
+      .select(
+        "id, profile_id, identifier_type, value, normalized_value",
+      )
+      .in("profile_id", profileIdsToLoad);
 
     if (profileIdentifiersError) {
       console.error(
@@ -246,7 +313,8 @@ export async function GET(request: NextRequest) {
 
       return NextResponse.json(
         {
-          error: "Impossible de récupérer les informations des profils.",
+          error:
+            "Impossible de récupérer les informations des profils.",
         },
         {
           status: 500,
@@ -259,18 +327,26 @@ export async function GET(request: NextRequest) {
   }
 
   const buildProfileResult = (profile: Profile) => {
-    const profileIdentifiers = allProfileIdentifiers.filter(
-      (identifier) => identifier.profile_id === profile.id,
-    );
+    const profileIdentifiers =
+      allProfileIdentifiers.filter(
+        (identifier) =>
+          identifier.profile_id === profile.id,
+      );
 
     return {
       id: profile.id,
       flagged: profile.flagged,
       pseudos: profileIdentifiers
-        .filter((identifier) => identifier.identifier_type === "pseudo")
+        .filter(
+          (identifier) =>
+            identifier.identifier_type === "pseudo",
+        )
         .map((identifier) => identifier.value),
       names: profileIdentifiers
-        .filter((identifier) => identifier.identifier_type === "name")
+        .filter(
+          (identifier) =>
+            identifier.identifier_type === "name",
+        )
         .map((identifier) => identifier.value),
     };
   };
@@ -279,21 +355,31 @@ export async function GET(request: NextRequest) {
 
   const similarResults = similarProfiles.map((profile) => {
     const matchingIdentifier = similarIdentifiers.find(
-      (item) => item.identifier.profile_id === profile.id,
+      (item) =>
+        item.identifier.profile_id === profile.id,
     );
 
     return {
       ...buildProfileResult(profile),
       similarity: matchingIdentifier
-        ? Math.round(matchingIdentifier.similarity * 100)
+        ? Math.round(
+            matchingIdentifier.similarity * 100,
+          )
         : 0,
     };
   });
 
-  return NextResponse.json({
-    query,
-    found: foundProfiles.length > 0,
-    profiles: foundProfiles,
-    similar: similarResults,
-  });
+  return NextResponse.json(
+    {
+      query,
+      found: foundProfiles.length > 0,
+      profiles: foundProfiles,
+      similar: similarResults,
+    },
+    {
+      headers: {
+        "Cache-Control": "no-store",
+      },
+    },
+  );
 }
