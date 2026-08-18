@@ -2,7 +2,7 @@ import { ImageResponse } from "next/og";
 
 export const runtime = "edge";
 
-export const alt = "Wardy FBI - Faut balancer l'individu !";
+export const alt = "Wardy BIP - Brigade des Inspecteurs de Profils !";
 export const size = {
   width: 1200,
   height: 630,

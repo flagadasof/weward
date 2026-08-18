@@ -13,6 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://weward-gules.vercel.app"),
   title: "Wardy BIP",
   description:
     "Vérifiez les profils signalés et consultez les informations disponibles.",
@@ -23,7 +24,7 @@ export const metadata: Metadata = {
     url: "https://weward-gules.vercel.app/",
     images: [
       {
-        url: "https://weward-gules.vercel.app/og-image.png",
+url: "https://weward-gules.vercel.app/og-image.png?v=2",
         width: 1402,
         height: 1122,
         alt: "Wardy BIP",
