@@ -64,13 +64,13 @@ export default function Image() {
               marginTop: 20,
               padding: "12px 30px",
               borderRadius: 999,
-              background: "#0ea5e9",
+              background: "#f56606",
               color: "#020617",
               fontSize: 32,
               fontWeight: 800,
             }}
           >
-            FAUT BALANCER L'INDIVIDU !
+            Brigade des Inspecteurs de Profils !
           </div>
 
           <div
