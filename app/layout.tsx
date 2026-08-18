@@ -14,16 +14,30 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Wardy BIP",
-  description: "Vérifiez les profils signalés et consultez les informations disponibles.",
+  description:
+    "Vérifiez les profils signalés et consultez les informations disponibles.",
   openGraph: {
     title: "Wardy BIP",
-    description: "Vérifiez les profils signalés et consultez les informations disponibles.",
-    images: ["/og-image.png"],
+    description:
+      "Vérifiez les profils signalés et consultez les informations disponibles.",
+    url: "https://weward-gules.vercel.app/",
+    images: [
+      {
+        url: "https://weward-gules.vercel.app/og-image.png",
+        width: 1402,
+        height: 1122,
+        alt: "Wardy BIP",
+      },
+    ],
   },
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
-  return (
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+    return (
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
