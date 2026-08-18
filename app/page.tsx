@@ -235,10 +235,10 @@ export default function HomePage() {
   <br />
   Envoyez-nous un mail à{" "}
   <a
-    href="mailto:wardyfbi@gmail.com"
+    href="mailto:wardybip@gmail.com"
     className="font-medium text-red-400 underline-offset-4 transition hover:text-red-300 hover:underline"
   >
-    wardyfbi@gmail.com
+    wardybip@gmail.com
   </a>{" "}
   avec vos preuves.
 </p>
@@ -273,7 +273,7 @@ export default function HomePage() {
                       </h2>
 
                       <p className="mt-2 text-sm text-red-200">
-                        Ce profil a été signalé.
+                        Ce profil a été signalé. A vos risques !
                       </p>
                     </div>
 
@@ -289,9 +289,9 @@ export default function HomePage() {
                             </h3>
 
                             <div className="mt-3 flex flex-wrap gap-2">
-                              {profile.pseudos.map((pseudo) => (
-                                <span
-                                  key={pseudo}
+                              {profile.pseudos.map((pseudo, index) => (
+  <span
+    key={`${pseudo}-${index}`}
                                   className="rounded-full bg-slate-800 px-3 py-1.5 text-sm text-slate-200"
                                 >
                                   {pseudo}
@@ -308,9 +308,9 @@ export default function HomePage() {
                             </h3>
 
                             <div className="mt-3 space-y-2">
-                              {profile.names.map((name) => (
+                              {profile.names.map((name, index) => (
                                 <div
-                                  key={name}
+                                key={`${name}-${index}`}
                                   className="rounded-xl bg-slate-900 px-4 py-3 text-sm text-slate-200"
                                 >
                                   {name}
@@ -331,8 +331,7 @@ export default function HomePage() {
                     </h2>
 
                     <p className="mt-2 text-sm text-emerald-200">
-                      Mais peut être une correspondance proche si tu regardes un peu plus bas...
-                    </p>
+Attention, non signalé mais soit vigileant quand même ! Nous ne sommes pas responsable de tes échanges.                    </p>
                   </div>
                 )}
 
@@ -359,9 +358,9 @@ export default function HomePage() {
                             <div>
                               {profile.pseudos.length > 0 && (
                                 <div className="flex flex-wrap gap-2">
-                                  {profile.pseudos.map((pseudo) => (
-                                    <span
-                                      key={pseudo}
+                                {profile.pseudos.map((pseudo, index) => (
+  <span
+    key={`${pseudo}-${index}`}
                                       className="rounded-full bg-slate-800 px-3 py-1 text-sm text-slate-200"
                                     >
                                       {pseudo}
@@ -372,9 +371,9 @@ export default function HomePage() {
 
                               {profile.names.length > 0 && (
                                 <div className="mt-3 space-y-1">
-                                  {profile.names.map((name) => (
+                                  {profile.names.map((name, index) => (
                                     <p
-                                      key={name}
+                                  key={`${name}-${index}`}
                                       className="text-sm text-slate-400"
                                     >
                                       {name}
@@ -403,10 +402,20 @@ export default function HomePage() {
             )}
           </section>
 
-          <p className="mt-6 text-center text-xs text-slate-600">
-            Les résultats sont basés sur les informations actuellement
-            présentes dans notre base.
-          </p>
+         <div className="mt-6 text-center">
+  <p className="text-xs text-slate-600">
+    Les résultats sont basés sur les informations actuellement
+    présentes dans notre base.
+  </p>
+
+  <p className="mt-2 text-xs text-slate-600">
+    © Wardybip 2026 — Version Beta 1.0 — Tous droits réservés.
+  </p>
+
+  <p className="mt-1 text-xs text-slate-700">
+    Ce site est indépendant de WeWard.
+  </p>
+</div>
         </div>
       </main>
 
