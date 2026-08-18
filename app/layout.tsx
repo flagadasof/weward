@@ -16,7 +16,7 @@ export const metadata: Metadata = {
   title: "Wardy BIP",
   description: "Vérifiez les profils signalés et consultez les informations disponibles.",
   openGraph: {
-    title: "Wardy FBI",
+    title: "Wardy BIP",
     description: "Vérifiez les profils signalés et consultez les informations disponibles.",
     images: ["/og-image.png"],
   },
