@@ -35,7 +35,7 @@ export default function HomePage() {
   const [reportError, setReportError] = useState("");
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-
+const resultRef = useRef<HTMLDivElement | null>(null);
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -62,6 +62,12 @@ export default function HomePage() {
       }
 
       setResult(data);
+      setTimeout(() => {
+  resultRef.current?.scrollIntoView({
+    behavior: "smooth",
+    block: "start",
+  });
+}, 50);
     } catch (error) {
       console.error(error);
 
@@ -292,7 +298,7 @@ className="h-20 w-20 rounded-2xl object-cover"
             </div>
 
             {result && (
-              <div className="border-t border-slate-800 px-6 py-8 sm:px-10">
+               <div ref={resultRef} className="border-t border-slate-800 px-6 py-8 sm:px-10">
                 {result.error ? (
                   <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-5 text-center text-red-300">
                     {result.error}
