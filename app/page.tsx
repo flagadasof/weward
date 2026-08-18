@@ -62,12 +62,19 @@ const resultRef = useRef<HTMLDivElement | null>(null);
       }
 
       setResult(data);
-      setTimeout(() => {
-  resultRef.current?.scrollIntoView({
-    behavior: "smooth",
-    block: "start",
-  });
-}, 50);
+    setTimeout(() => {
+  if (resultRef.current) {
+    const y =
+      resultRef.current.getBoundingClientRect().top +
+      window.scrollY -
+      20;
+
+    window.scrollTo({
+      top: y,
+      behavior: "smooth",
+    });
+  }
+}, 100);
     } catch (error) {
       console.error(error);
 
