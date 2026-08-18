@@ -331,7 +331,7 @@ export default function HomePage() {
                     </h2>
 
                     <p className="mt-2 text-sm text-emerald-200">
-Attention, non signalé mais soit vigileant quand même ! Nous ne sommes pas responsable de tes échanges.                    </p>
+Attention, non signalé mais soit vigileant quand même ! Nous ne sommes pas responsables de tes échanges.                    </p>
                   </div>
                 )}
 
