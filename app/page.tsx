@@ -242,6 +242,40 @@ export default function HomePage() {
   </a>{" "}
   avec vos preuves.
 </p>
+<div className="mt-8">
+  <h2 className="text-lg font-bold text-white">
+    👥 Communauté WeWard
+  </h2>
+
+  <p className="mt-1 text-sm text-slate-400">
+    Retrouvez la communauté sur Facebook.
+  </p>
+
+<div className="mt-4 flex items-center justify-center gap-8"> <a
+  href="https://www.facebook.com/groups/1539718463416164/"
+  target="_blank"
+  rel="noopener noreferrer"
+>
+  <img
+    src="/facebook-groupe-1.jpg"
+    alt="Groupe Facebook 1"
+className="h-20 w-20 rounded-2xl object-cover"
+  />
+</a>
+
+    <a
+  href="https://www.facebook.com/groups/2423817841302793/"
+  target="_blank"
+  rel="noopener noreferrer"
+>
+  <img
+    src="/facebook-groupe-2.jpg"
+    alt="Groupe Facebook 2"
+className="h-20 w-20 rounded-2xl object-cover"
+  />
+</a>
+  </div>
+</div>
 {/*
 <p className="mt-5 text-sm text-slate-400">
   Vous pensez qu’un profil devrait être signalé ?
@@ -413,7 +447,7 @@ Attention, non signalé mais soit vigileant quand même ! Nous ne sommes pas res
   </p>
 
   <p className="mt-1 text-xs text-slate-700">
-    Ce site est indépendant de WeWard.
+    Ce site est indépendant de WeWard. By Flagada
   </p>
 </div>
         </div>

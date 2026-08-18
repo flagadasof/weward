@@ -184,6 +184,49 @@ function calculateSimilarity(a: string, b: string) {
   return (2 * intersection) / total;
 }
 
+/**
+ * Récupère tous les identifiants Supabase par lots.
+ *
+ * Supabase limite les réponses à un certain nombre de lignes.
+ * On récupère donc les données par pages de 1000 lignes.
+ */
+async function getAllIdentifiers(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+) {
+  const PAGE_SIZE = 1000;
+  let from = 0;
+
+  const allIdentifiers: Identifier[] = [];
+
+  while (true) {
+ const { data, error, count } = await supabase
+  .from("profile_identifiers")
+  .select(
+    "id, profile_id, identifier_type, value, normalized_value",
+    { count: "exact" }
+  )
+  .range(from, from + PAGE_SIZE - 1);
+
+
+
+    if (error) {
+      throw error;
+    }
+
+    const page = (data ?? []) as Identifier[];
+
+    allIdentifiers.push(...page);
+
+    if (page.length < PAGE_SIZE) {
+      break;
+    }
+
+    from += PAGE_SIZE;
+  }
+
+  return allIdentifiers;
+}
+
 export async function GET(request: NextRequest) {
   cleanupRateLimitStore();
 
@@ -270,6 +313,7 @@ export async function GET(request: NextRequest) {
 
   try {
     supabase = getSupabaseAdmin();
+
   } catch (error) {
     console.error(
       "Configuration Supabase serveur invalide :",
@@ -286,18 +330,15 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const { data: identifiers, error: identifiersError } =
-    await supabase
-      .from("profile_identifiers")
-      .select(
-        "id, profile_id, identifier_type, value, normalized_value",
-      )
-      .limit(1000);
+  let allIdentifiers: Identifier[];
 
-  if (identifiersError) {
+  try {
+    allIdentifiers = await getAllIdentifiers(supabase);
+
+  } catch (error) {
     console.error(
       "Erreur lors de la recherche des identifiants :",
-      identifiersError,
+      error,
     );
 
     return NextResponse.json(
@@ -309,8 +350,6 @@ export async function GET(request: NextRequest) {
       },
     );
   }
-
-  const allIdentifiers = (identifiers ?? []) as Identifier[];
 
   const exactMatches = allIdentifiers.filter(
     (identifier) =>
@@ -354,21 +393,47 @@ export async function GET(request: NextRequest) {
 
   const exactProfileIdSet = new Set(exactProfileIds);
 
-  const similarIdentifiers = allIdentifiers
-    .filter(
-      (identifier) =>
-        !exactProfileIdSet.has(identifier.profile_id),
-    )
-    .map((identifier) => ({
-      identifier,
-      similarity: calculateSimilarity(
-        normalizedQuery,
+const similarIdentifiers = allIdentifiers
+  .filter(
+    (identifier) =>
+      !exactProfileIdSet.has(identifier.profile_id),
+  )
+  .map((identifier) => {
+    const normalizedIdentifier =
+      normalizeForComparison(
         identifier.normalized_value,
-      ),
-    }))
-    .filter((item) => item.similarity >= 0.35)
-    .sort((a, b) => b.similarity - a.similarity)
-    .slice(0, 10);
+      );
+
+    const containsQuery =
+      normalizedIdentifier.includes(normalizedQuery);
+
+    const similarity = calculateSimilarity(
+      normalizedQuery,
+      identifier.normalized_value,
+    );
+
+    return {
+      identifier,
+      similarity,
+      containsQuery,
+    };
+  })
+  .filter(
+    (item) =>
+      item.containsQuery || item.similarity >= 0.35,
+  )
+  .sort((a, b) => {
+    if (a.containsQuery && !b.containsQuery) {
+      return -1;
+    }
+
+    if (!a.containsQuery && b.containsQuery) {
+      return 1;
+    }
+
+    return b.similarity - a.similarity;
+  })
+  .slice(0, 10);
 
   const similarProfileIds = [
     ...new Set(
@@ -394,6 +459,7 @@ export async function GET(request: NextRequest) {
         "Erreur lors de la récupération des profils proches :",
         similarProfilesError,
       );
+
       return NextResponse.json(
         {
           error: "Impossible de récupérer les profils proches.",
