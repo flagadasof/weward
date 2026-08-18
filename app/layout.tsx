@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Wardy FBI",
+  title: "Wardy BIP",
   description: "Vérifiez les profils signalés et consultez les informations disponibles.",
   openGraph: {
     title: "Wardy FBI",
