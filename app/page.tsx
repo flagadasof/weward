@@ -264,7 +264,7 @@ const resultRef = useRef<HTMLDivElement | null>(null);
    Flagada vous remercie ! Et si ca vous plait pas c'est pareil. Amicalement votre
   </p>
 
-
+</div>
 {/*
 <p className="mt-5 text-sm text-slate-400">
   Vous pensez qu’un profil devrait être signalé ?
