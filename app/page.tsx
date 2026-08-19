@@ -257,7 +257,8 @@ const resultRef = useRef<HTMLDivElement | null>(null);
 </p>
 <div className="mt-8">
   <h2 className="text-lg font-bold text-white">
-    Pas d'jaloux ! Y'en a pour tous l'monde ! L'entraide ça vous parle?  </h2>
+   Destinés à tous les utilisateurs weward. 
+   </h2>
 
   <p className="mt-1 text-sm text-slate-400">
    Flagada vous remercie ! Et si ça vous plait pas c'est pareil. Amicalement votre
