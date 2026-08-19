@@ -257,11 +257,10 @@ const resultRef = useRef<HTMLDivElement | null>(null);
 </p>
 <div className="mt-8">
   <h2 className="text-lg font-bold text-white">
-    Pas d'jaloux ! Y'en a pour tous le monde ! J'ai pas crée ça pour avoir de la jalousie juste pour aider !
-  </h2>
+    Pas d'jaloux ! Y'en a pour tous l'monde ! L'entraide ça vous parle?  </h2>
 
   <p className="mt-1 text-sm text-slate-400">
-   Flagada vous remercie ! Et si ca vous plait pas c'est pareil. Amicalement votre
+   Flagada vous remercie ! Et si ça vous plait pas c'est pareil. Amicalement votre
   </p>
 
 </div>
