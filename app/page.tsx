@@ -2,22 +2,20 @@
 
 import { FormEvent, useRef, useState } from "react";
 
-type Profile = {
+type SearchMatch = {
   id: string;
+  value: string;
+  type: "pseudo" | "name";
+  similarity: number;
+  exact: boolean;
   flagged: boolean;
-  pseudos: string[];
-  names: string[];
 };
 
 type SearchResult = {
   query: string;
   found: boolean;
-  profiles: Profile[];
-  similar: Array<
-    Profile & {
-      similarity: number;
-    }
-  >;
+  exact: SearchMatch[];
+  matches: SearchMatch[];
   error?: string;
 };
 
@@ -35,7 +33,7 @@ export default function HomePage() {
   const [reportError, setReportError] = useState("");
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-const resultRef = useRef<HTMLDivElement | null>(null);
+  const resultRef = useRef<HTMLDivElement | null>(null);
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -62,27 +60,28 @@ const resultRef = useRef<HTMLDivElement | null>(null);
       }
 
       setResult(data);
-    setTimeout(() => {
-  if (resultRef.current) {
-    const y =
-      resultRef.current.getBoundingClientRect().top +
-      window.scrollY -
-      20;
 
-    window.scrollTo({
-      top: y,
-      behavior: "smooth",
-    });
-  }
-}, 100);
+      setTimeout(() => {
+        if (resultRef.current) {
+          const y =
+            resultRef.current.getBoundingClientRect().top +
+            window.scrollY -
+            20;
+
+          window.scrollTo({
+            top: y,
+            behavior: "smooth",
+          });
+        }
+      }, 100);
     } catch (error) {
       console.error(error);
 
       setResult({
         query: value,
         found: false,
-        profiles: [],
-        similar: [],
+        exact: [],
+        matches: [],
         error: "Impossible d'effectuer la vérification.",
       });
     } finally {
@@ -260,9 +259,7 @@ const resultRef = useRef<HTMLDivElement | null>(null);
    Destinés à tous les utilisateurs weward. 
    </h2>
 
-  <p className="mt-1 text-sm text-slate-400">
-   Flagada vous remercie ! Et si ça vous plait pas c'est pareil. Amicalement votre
-  </p>
+ 
 
 </div>
 {/*
@@ -281,145 +278,150 @@ const resultRef = useRef<HTMLDivElement | null>(null);
             </div>
 
             {result && (
-               <div ref={resultRef} className="border-t border-slate-800 px-6 py-8 sm:px-10">
+              <div
+                ref={resultRef}
+                className="border-t border-slate-800 px-6 py-8 sm:px-10"
+              >
                 {result.error ? (
                   <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-5 text-center text-red-300">
                     {result.error}
                   </div>
-                ) : result.found ? (
+                ) : result.exact.length > 0 ? (
                   <div className="space-y-6">
                     <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-6 text-center">
                       <div className="text-3xl">⚠️</div>
 
                       <h2 className="mt-3 text-xl font-bold text-red-400">
-                        Attention
+                        Identifiant signalé
                       </h2>
 
                       <p className="mt-2 text-sm text-red-200">
-                        Ce profil a été signalé. A vos risques !
+                        Une correspondance exacte a été trouvée dans notre base.
                       </p>
                     </div>
 
-                    {result.profiles.map((profile) => (
-                      <div
-                        key={profile.id}
-                        className="rounded-2xl border border-slate-800 bg-slate-950 p-5"
-                      >
-                        {profile.pseudos.length > 0 && (
-                          <div>
-                            <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-500">
-                              Pseudos associés
-                            </h3>
-
-                            <div className="mt-3 flex flex-wrap gap-2">
-                              {profile.pseudos.map((pseudo, index) => (
-  <span
-    key={`${pseudo}-${index}`}
-                                  className="rounded-full bg-slate-800 px-3 py-1.5 text-sm text-slate-200"
-                                >
-                                  {pseudo}
+                    <div className="space-y-3">
+                      {result.exact.map((match) => (
+                        <div
+                          key={match.id}
+                          className="rounded-2xl border border-red-500/20 bg-slate-950 p-5"
+                        >
+                          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="rounded-full bg-slate-800 px-3 py-1.5 text-sm font-medium text-white">
+                                  {match.value}
                                 </span>
-                              ))}
+
+                                <span className="rounded-full bg-slate-800 px-3 py-1.5 text-xs text-slate-400">
+                                  {match.type === "pseudo" ? "Pseudo" : "Nom Facebook"}
+                                </span>
+                              </div>
+
+                              <p className="mt-3 text-sm text-red-300">
+                                🔴 Identifiant signalé
+                              </p>
+                            </div>
+
+                            <div className="shrink-0 rounded-xl bg-red-500/10 px-3 py-2 text-center">
+                              <div className="text-lg font-bold text-red-400">100%</div>
+                              <div className="text-xs text-slate-500">correspondance</div>
                             </div>
                           </div>
-                        )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : result.matches.length > 0 ? (
+                  <div className="space-y-8">
+                    <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-6 text-center">
+                      <div className="text-3xl">🔎</div>
 
-                        {profile.names.length > 0 && (
-                          <div className="mt-6">
-                            <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-500">
-                              Noms associés
-                            </h3>
+                      <h2 className="mt-3 text-xl font-bold text-amber-400">
+                        Correspondances trouvées
+                      </h2>
 
-                            <div className="mt-3 space-y-2">
-                              {profile.names.map((name, index) => (
-                                <div
-                                key={`${name}-${index}`}
-                                  className="rounded-xl bg-slate-900 px-4 py-3 text-sm text-slate-200"
-                                >
-                                  {name}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
+                      <p className="mt-2 text-sm text-amber-200">
+                        Aucun résultat exact pour « {result.query} », mais des identifiants proches ont été trouvés.
+                      </p>
+                    </div>
+
+                    <section>
+                      <div>
+                        <h2 className="text-xl font-bold">Profils proches</h2>
+                        <p className="mt-1 text-sm text-slate-400">
+                          Plus le pourcentage est élevé, plus l'identifiant ressemble à votre recherche.
+                        </p>
                       </div>
-                    ))}
+
+                      <div className="mt-4 space-y-3">
+                        {result.matches.map((match) => (
+                          <div
+                            key={match.id}
+                            className="rounded-2xl border border-slate-800 bg-slate-950 p-5"
+                          >
+                            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                              <div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="rounded-full bg-slate-800 px-3 py-1.5 text-sm font-medium text-slate-200">
+                                    {match.value}
+                                  </span>
+
+                                  <span className="rounded-full bg-slate-800 px-3 py-1.5 text-xs text-slate-500">
+                                    {match.type === "pseudo" ? "Pseudo" : "Nom Facebook"}
+                                  </span>
+                                </div>
+
+                                {match.flagged ? (
+                                  <p className="mt-3 text-sm text-red-400">
+                                    🔴 Identifiant signalé
+                                  </p>
+                                ) : (
+                                  <p className="mt-3 text-sm text-slate-500">
+                                    Correspondance dans la base
+                                  </p>
+                                )}
+                              </div>
+
+                              <div className="shrink-0 rounded-xl bg-slate-800 px-3 py-2 text-center">
+                                <div
+                                  className={`text-lg font-bold ${
+                                    match.similarity >= 80
+                                      ? "text-amber-400"
+                                      : match.similarity >= 65
+                                        ? "text-sky-400"
+                                        : "text-slate-300"
+                                  }`}
+                                >
+                                  {match.similarity}%
+                                </div>
+
+                                <div className="text-xs text-slate-500">
+                                  correspondance
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
                   </div>
                 ) : (
                   <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-6 text-center">
                     <div className="text-3xl">✓</div>
 
                     <h2 className="mt-3 text-xl font-bold text-emerald-400">
-                      Aucun problème détecté sur ce nom comme tu l'as orthographié
+                      Aucun résultat trouvé
                     </h2>
 
                     <p className="mt-2 text-sm text-emerald-200">
-Attention, non signalé mais soit vigileant quand même ! Nous ne sommes pas responsables de tes échanges.                    </p>
+                      Aucun identifiant correspondant à votre recherche n'a été trouvé dans notre base.
+                    </p>
+
+                    <p className="mt-3 text-xs text-emerald-300/70">
+                      Attention, non signalé ne signifie pas forcément sans risque. Nous ne sommes pas responsables de vos échanges.
+                    </p>
                   </div>
-                )}
-
-                {result.similar.length > 0 && (
-                  <section className="mt-8">
-                    <div>
-                      <h2 className="text-xl font-bold">
-                        Profils proches
-                      </h2>
-
-                      <p className="mt-1 text-sm text-slate-400">
-                        Des profils similaires à votre recherche ont
-                        été trouvés.
-                      </p>
-                    </div>
-
-                    <div className="mt-4 space-y-3">
-                      {result.similar.map((profile) => (
-                        <div
-                          key={profile.id}
-                          className="rounded-2xl border border-slate-800 bg-slate-950 p-5"
-                        >
-                          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                            <div>
-                              {profile.pseudos.length > 0 && (
-                                <div className="flex flex-wrap gap-2">
-                                {profile.pseudos.map((pseudo, index) => (
-  <span
-    key={`${pseudo}-${index}`}
-                                      className="rounded-full bg-slate-800 px-3 py-1 text-sm text-slate-200"
-                                    >
-                                      {pseudo}
-                                    </span>
-                                  ))}
-                                </div>
-                              )}
-
-                              {profile.names.length > 0 && (
-                                <div className="mt-3 space-y-1">
-                                  {profile.names.map((name, index) => (
-                                    <p
-                                  key={`${name}-${index}`}
-                                      className="text-sm text-slate-400"
-                                    >
-                                      {name}
-                                    </p>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-
-                            <div className="shrink-0 rounded-xl bg-slate-800 px-3 py-2 text-center">
-                              <div className="text-lg font-bold text-sky-400">
-                                {profile.similarity}%
-                              </div>
-
-                              <div className="text-xs text-slate-500">
-                                correspondance
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </section>
                 )}
               </div>
             )}

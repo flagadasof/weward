@@ -20,14 +20,6 @@ type RateLimitEntry = {
   resetAt: number;
 };
 
-/**
- * Rate limit en mémoire.
- *
- * Limite : 30 recherches par minute et par IP.
- *
- * Cette protection est volontairement simple pour ne pas ajouter
- * de service externe au projet.
- */
 const RATE_LIMIT_MAX = 30;
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 
@@ -97,7 +89,8 @@ function cleanupRateLimitStore() {
 
 function getSupabaseAdmin() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const serviceRoleKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!supabaseUrl || !serviceRoleKey) {
     throw new Error(
@@ -113,6 +106,13 @@ function getSupabaseAdmin() {
   });
 }
 
+/**
+ * Normalisation de la recherche.
+ *
+ * Exemple :
+ * "@Yaya77" -> "yaya77"
+ * "Stéphanie Millan" -> "stephanie millan"
+ */
 function normalizeSearch(value: string) {
   return value
     .trim()
@@ -133,6 +133,11 @@ function normalizeForComparison(value: string) {
     .trim();
 }
 
+/**
+ * Similarité Jaccard basée sur des trigrammes.
+ *
+ * Retourne une valeur entre 0 et 1.
+ */
 function calculateSimilarity(a: string, b: string) {
   const left = normalizeForComparison(a);
   const right = normalizeForComparison(b);
@@ -145,27 +150,23 @@ function calculateSimilarity(a: string, b: string) {
     return 1;
   }
 
-  const leftTrigrams = new Set<string>();
-  const rightTrigrams = new Set<string>();
-
   const createTrigrams = (value: string) => {
     const padded = `  ${value}  `;
     const trigrams = new Set<string>();
 
-    for (let index = 0; index < padded.length - 2; index += 1) {
+    for (
+      let index = 0;
+      index < padded.length - 2;
+      index += 1
+    ) {
       trigrams.add(padded.slice(index, index + 3));
     }
 
     return trigrams;
   };
 
-  createTrigrams(left).forEach((value) =>
-    leftTrigrams.add(value),
-  );
-
-  createTrigrams(right).forEach((value) =>
-    rightTrigrams.add(value),
-  );
+  const leftTrigrams = createTrigrams(left);
+  const rightTrigrams = createTrigrams(right);
 
   let intersection = 0;
 
@@ -175,7 +176,8 @@ function calculateSimilarity(a: string, b: string) {
     }
   });
 
-  const total = leftTrigrams.size + rightTrigrams.size;
+  const total =
+    leftTrigrams.size + rightTrigrams.size;
 
   if (total === 0) {
     return 0;
@@ -185,10 +187,73 @@ function calculateSimilarity(a: string, b: string) {
 }
 
 /**
- * Récupère tous les identifiants Supabase par lots.
+ * Calcule le score final.
  *
- * Supabase limite les réponses à un certain nombre de lignes.
- * On récupère donc les données par pages de 1000 lignes.
+ * Cas important :
+ *
+ * yaya -> @yaya77
+ *
+ * Comme "yaya" est contenu dans "yaya77",
+ * on considère cela comme une correspondance
+ * forte même si la similarité trigramme brute
+ * est plus faible.
+ */
+function calculateSearchScore(
+  query: string,
+  identifier: string,
+) {
+  const normalizedQuery =
+    normalizeForComparison(query);
+
+  const normalizedIdentifier =
+    normalizeForComparison(identifier);
+
+  if (!normalizedQuery || !normalizedIdentifier) {
+    return 0;
+  }
+
+  if (normalizedQuery === normalizedIdentifier) {
+    return 100;
+  }
+
+  const similarity =
+    calculateSimilarity(
+      normalizedQuery,
+      normalizedIdentifier,
+    ) * 100;
+
+  const contains =
+    normalizedIdentifier.includes(normalizedQuery);
+
+  if (contains) {
+    const ratio =
+      normalizedQuery.length /
+      normalizedIdentifier.length;
+
+    /*
+     * Une correspondance contenue dans un identifiant
+     * reçoit un score élevé.
+     *
+     * Exemple :
+     * yaya -> yaya77 ≈ 96 %
+     * yaya -> yaya57720 ≈ 89 %
+     */
+    const containmentScore =
+      80 + ratio * 20;
+
+    return Math.round(
+      Math.max(
+        similarity,
+        containmentScore,
+      ),
+    );
+  }
+
+  return Math.round(similarity);
+}
+
+/**
+ * Récupère tous les identifiants par lots.
  */
 async function getAllIdentifiers(
   supabase: ReturnType<typeof getSupabaseAdmin>,
@@ -199,15 +264,15 @@ async function getAllIdentifiers(
   const allIdentifiers: Identifier[] = [];
 
   while (true) {
- const { data, error, count } = await supabase
-  .from("profile_identifiers")
-  .select(
-    "id, profile_id, identifier_type, value, normalized_value",
-    { count: "exact" }
-  )
-  .range(from, from + PAGE_SIZE - 1);
-
-
+    const { data, error } = await supabase
+      .from("profile_identifiers")
+      .select(
+        "id, profile_id, identifier_type, value, normalized_value",
+      )
+      .range(
+        from,
+        from + PAGE_SIZE - 1,
+      );
 
     if (error) {
       throw error;
@@ -243,26 +308,35 @@ export async function GET(request: NextRequest) {
         status: 429,
         headers: {
           "Cache-Control": "no-store",
-          "Retry-After": String(rateLimit.retryAfter),
-          "X-RateLimit-Limit": String(RATE_LIMIT_MAX),
+          "Retry-After": String(
+            rateLimit.retryAfter,
+          ),
+          "X-RateLimit-Limit": String(
+            RATE_LIMIT_MAX,
+          ),
           "X-RateLimit-Remaining": "0",
         },
       },
     );
   }
 
-  const query = request.nextUrl.searchParams.get("q")?.trim();
+  const query = request.nextUrl.searchParams
+    .get("q")
+    ?.trim();
 
   if (!query) {
     return NextResponse.json(
       {
-        error: "Le nom ou pseudo est obligatoire.",
+        error:
+          "Le nom ou pseudo est obligatoire.",
       },
       {
         status: 400,
         headers: {
           "Cache-Control": "no-store",
-          "X-RateLimit-Limit": String(RATE_LIMIT_MAX),
+          "X-RateLimit-Limit": String(
+            RATE_LIMIT_MAX,
+          ),
           "X-RateLimit-Remaining": String(
             rateLimit.remaining,
           ),
@@ -274,13 +348,16 @@ export async function GET(request: NextRequest) {
   if (query.length > 100) {
     return NextResponse.json(
       {
-        error: "La recherche est trop longue.",
+        error:
+          "La recherche est trop longue.",
       },
       {
         status: 400,
         headers: {
           "Cache-Control": "no-store",
-          "X-RateLimit-Limit": String(RATE_LIMIT_MAX),
+          "X-RateLimit-Limit": String(
+            RATE_LIMIT_MAX,
+          ),
           "X-RateLimit-Remaining": String(
             rateLimit.remaining,
           ),
@@ -289,18 +366,22 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const normalizedQuery = normalizeSearch(query);
+  const normalizedQuery =
+    normalizeSearch(query);
 
   if (!normalizedQuery) {
     return NextResponse.json(
       {
-        error: "Le nom ou pseudo est obligatoire.",
+        error:
+          "Le nom ou pseudo est obligatoire.",
       },
       {
         status: 400,
         headers: {
           "Cache-Control": "no-store",
-          "X-RateLimit-Limit": String(RATE_LIMIT_MAX),
+          "X-RateLimit-Limit": String(
+            RATE_LIMIT_MAX,
+          ),
           "X-RateLimit-Remaining": String(
             rateLimit.remaining,
           ),
@@ -313,7 +394,6 @@ export async function GET(request: NextRequest) {
 
   try {
     supabase = getSupabaseAdmin();
-
   } catch (error) {
     console.error(
       "Configuration Supabase serveur invalide :",
@@ -322,7 +402,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(
       {
-        error: "Configuration serveur incorrecte.",
+        error:
+          "Configuration serveur incorrecte.",
       },
       {
         status: 500,
@@ -330,11 +411,14 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  /*
+   * Récupération de tous les identifiants.
+   */
   let allIdentifiers: Identifier[];
 
   try {
-    allIdentifiers = await getAllIdentifiers(supabase);
-
+    allIdentifiers =
+      await getAllIdentifiers(supabase);
   } catch (error) {
     console.error(
       "Erreur lors de la recherche des identifiants :",
@@ -343,7 +427,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(
       {
-        error: "Impossible de rechercher les profils.",
+        error:
+          "Impossible de rechercher les profils.",
       },
       {
         status: 500,
@@ -351,26 +436,113 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const exactMatches = allIdentifiers.filter(
-    (identifier) =>
-      normalizeForComparison(identifier.normalized_value) ===
-      normalizedQuery,
-  );
+  /*
+   * Calcul du score pour chaque identifiant.
+   *
+   * On travaille maintenant directement
+   * sur les pseudos / noms.
+   */
+  const scoredIdentifiers = allIdentifiers
+    .map((identifier) => {
+      const score = calculateSearchScore(
+        normalizedQuery,
+        identifier.normalized_value ||
+          identifier.value,
+      );
 
-  const exactProfileIds = [
+      const normalizedIdentifier =
+        normalizeForComparison(
+          identifier.normalized_value ||
+            identifier.value,
+        );
+
+      const containsQuery =
+        normalizedIdentifier.includes(
+          normalizedQuery,
+        );
+
+      const exact =
+        normalizedIdentifier ===
+        normalizedQuery;
+
+      return {
+        identifier,
+        score,
+        containsQuery,
+        exact,
+      };
+    })
+    /*
+     * Seuil minimum demandé :
+     * 50 %.
+     */
+    .filter(
+      (item) =>
+        item.score >= 50 ||
+        item.exact,
+    )
+    .sort((a, b) => {
+      /*
+       * Exact toujours en premier.
+       */
+      if (a.exact && !b.exact) {
+        return -1;
+      }
+
+      if (!a.exact && b.exact) {
+        return 1;
+      }
+
+      /*
+       * Puis les correspondances qui
+       * contiennent directement la recherche.
+       */
+      if (
+        a.containsQuery &&
+        !b.containsQuery
+      ) {
+        return -1;
+      }
+
+      if (
+        !a.containsQuery &&
+        b.containsQuery
+      ) {
+        return 1;
+      }
+
+      /*
+       * Enfin par score décroissant.
+       */
+      return b.score - a.score;
+    })
+    .slice(0, 20);
+
+  /*
+   * Récupération des profils concernés
+   * uniquement pour connaître leur statut "flagged".
+   */
+  const profileIds = [
     ...new Set(
-      exactMatches.map((identifier) => identifier.profile_id),
+      scoredIdentifiers.map(
+        (item) =>
+          item.identifier.profile_id,
+      ),
     ),
   ];
 
   let profiles: Profile[] = [];
 
-  if (exactProfileIds.length > 0) {
-    const { data: profileData, error: profilesError } =
-      await supabase
-        .from("reported_profiles")
-        .select("id, source_profile_id, flagged")
-        .in("id", exactProfileIds);
+  if (profileIds.length > 0) {
+    const {
+      data: profileData,
+      error: profilesError,
+    } = await supabase
+      .from("reported_profiles")
+      .select(
+        "id, source_profile_id, flagged",
+      )
+      .in("id", profileIds);
 
     if (profilesError) {
       console.error(
@@ -380,130 +552,8 @@ export async function GET(request: NextRequest) {
 
       return NextResponse.json(
         {
-          error: "Impossible de récupérer les profils.",
-        },
-        {
-          status: 500,
-        },
-      );
-    }
-
-    profiles = (profileData ?? []) as Profile[];
-  }
-
-  const exactProfileIdSet = new Set(exactProfileIds);
-
-const similarIdentifiers = allIdentifiers
-  .filter(
-    (identifier) =>
-      !exactProfileIdSet.has(identifier.profile_id),
-  )
-  .map((identifier) => {
-    const normalizedIdentifier =
-      normalizeForComparison(
-        identifier.normalized_value,
-      );
-
-    const containsQuery =
-      normalizedIdentifier.includes(normalizedQuery);
-
-    const similarity = calculateSimilarity(
-      normalizedQuery,
-      identifier.normalized_value,
-    );
-
-    return {
-      identifier,
-      similarity,
-      containsQuery,
-    };
-  })
-  .filter(
-    (item) =>
-      item.containsQuery || item.similarity >= 0.35,
-  )
-  .sort((a, b) => {
-    if (a.containsQuery && !b.containsQuery) {
-      return -1;
-    }
-
-    if (!a.containsQuery && b.containsQuery) {
-      return 1;
-    }
-
-    return b.similarity - a.similarity;
-  })
-  .slice(0, 10);
-
-  const similarProfileIds = [
-    ...new Set(
-      similarIdentifiers.map(
-        (item) => item.identifier.profile_id,
-      ),
-    ),
-  ];
-
-  let similarProfiles: Profile[] = [];
-
-  if (similarProfileIds.length > 0) {
-    const {
-      data: similarProfileData,
-      error: similarProfilesError,
-    } = await supabase
-      .from("reported_profiles")
-      .select("id, source_profile_id, flagged")
-      .in("id", similarProfileIds);
-
-    if (similarProfilesError) {
-      console.error(
-        "Erreur lors de la récupération des profils proches :",
-        similarProfilesError,
-      );
-
-      return NextResponse.json(
-        {
-          error: "Impossible de récupérer les profils proches.",
-        },
-        {
-          status: 500,
-        },
-      );
-    }
-
-    similarProfiles = (similarProfileData ??
-      []) as Profile[];
-  }
-
-  const profileIdsToLoad = [
-    ...new Set([
-      ...exactProfileIds,
-      ...similarProfileIds,
-    ]),
-  ];
-
-  let allProfileIdentifiers: Identifier[] = [];
-
-  if (profileIdsToLoad.length > 0) {
-    const {
-      data: profileIdentifiersData,
-      error: profileIdentifiersError,
-    } = await supabase
-      .from("profile_identifiers")
-      .select(
-        "id, profile_id, identifier_type, value, normalized_value",
-      )
-      .in("profile_id", profileIdsToLoad);
-
-    if (profileIdentifiersError) {
-      console.error(
-        "Erreur lors de la récupération des identifiants des profils :",
-        profileIdentifiersError,
-      );
-
-      return NextResponse.json(
-        {
           error:
-            "Impossible de récupérer les informations des profils.",
+            "Impossible de récupérer les profils.",
         },
         {
           status: 500,
@@ -511,64 +561,72 @@ const similarIdentifiers = allIdentifiers
       );
     }
 
-    allProfileIdentifiers =
-      (profileIdentifiersData ?? []) as Identifier[];
+    profiles =
+      (profileData ?? []) as Profile[];
   }
 
-  const buildProfileResult = (profile: Profile) => {
-    const profileIdentifiers =
-      allProfileIdentifiers.filter(
-        (identifier) =>
-          identifier.profile_id === profile.id,
-      );
+  const profileMap = new Map<
+    string,
+    Profile
+  >(
+    profiles.map((profile) => [
+      profile.id,
+      profile,
+    ]),
+  );
 
-    return {
-      id: profile.id,
-      flagged: profile.flagged,
-      pseudos: profileIdentifiers
-        .filter(
-          (identifier) =>
-            identifier.identifier_type === "pseudo",
-        )
-        .map((identifier) => identifier.value),
-      names: profileIdentifiers
-        .filter(
-          (identifier) =>
-            identifier.identifier_type === "name",
-        )
-        .map((identifier) => identifier.value),
-    };
-  };
+  /*
+   * Résultat final :
+   * un résultat = un pseudo ou un nom.
+   *
+   * Il n'y a plus de notion d'association
+   * dans la réponse de recherche.
+   */
+  const matches = scoredIdentifiers.map(
+    (item) => {
+      const profile =
+        profileMap.get(
+          item.identifier.profile_id,
+        );
 
-  const foundProfiles = profiles.map(buildProfileResult);
+      return {
+        id: item.identifier.id,
+        value: item.identifier.value,
+        type: item.identifier.identifier_type,
+        similarity: item.score,
+        exact: item.exact,
+        flagged: profile?.flagged ?? false,
+      };
+    },
+  );
 
-  const similarResults = similarProfiles.map((profile) => {
-    const matchingIdentifier = similarIdentifiers.find(
-      (item) =>
-        item.identifier.profile_id === profile.id,
-    );
+  /*
+   * Correspondance exacte.
+   */
+  const exactMatches = matches.filter(
+    (match) => match.exact,
+  );
 
-    return {
-      ...buildProfileResult(profile),
-      similarity: matchingIdentifier
-        ? Math.round(
-            matchingIdentifier.similarity * 100,
-          )
-        : 0,
-    };
-  });
+  /*
+   * Correspondances approximatives.
+   */
+  const similarMatches = matches.filter(
+    (match) => !match.exact,
+  );
 
   return NextResponse.json(
     {
       query,
-      found: foundProfiles.length > 0,
-      profiles: foundProfiles,
-      similar: similarResults,
+      found: exactMatches.length > 0,
+      exact: exactMatches,
+      matches: similarMatches,
     },
     {
       headers: {
         "Cache-Control": "no-store",
-        "X-RateLimit-Limit": String(RATE_LIMIT_MAX),
+        "X-RateLimit-Limit": String(
+          RATE_LIMIT_MAX,
+        ),
         "X-RateLimit-Remaining": String(
           rateLimit.remaining,
         ),
