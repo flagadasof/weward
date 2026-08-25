@@ -2,105 +2,70 @@
 
 import { useState } from "react";
 
-type AssociationType = "pseudo" | "name";
-
-type AssociationRow = {
-  id: number;
-  type: AssociationType;
-  value: string;
-};
+type IdentifierType = "pseudo" | "name";
 
 type VerificationResult = {
   found: boolean;
-  profileId?: string | null;
-  pseudos?: string[];
-  names?: string[];
+  identifier: {
+    id: string;
+    profileId: string;
+    type: IdentifierType;
+    value: string;
+  } | null;
   error?: string;
+};
+
+type AddedIdentifier = {
+  id: string;
+  type: IdentifierType;
+  value: string;
 };
 
 type SaveResult = {
   success?: boolean;
+  alreadyExists?: boolean;
+  created?: boolean;
+  identifier?: AddedIdentifier;
   error?: string;
-  profileId?: string;
-  added?: string[];
-  alreadyPresent?: string[];
-  pseudos?: string[];
-  names?: string[];
 };
 
 export default function AssoPage() {
-  const [mainPseudo, setMainPseudo] = useState("");
+  const [type, setType] =
+    useState<IdentifierType>("pseudo");
 
-  const [associations, setAssociations] = useState<
-    AssociationRow[]
-  >([
-    {
-      id: 1,
-      type: "pseudo",
-      value: "",
-    },
-  ]);
+  const [value, setValue] = useState("");
 
   const [verification, setVerification] =
     useState<VerificationResult | null>(null);
 
-  const [verifying, setVerifying] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [verifying, setVerifying] =
+    useState(false);
 
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
+  const [saving, setSaving] =
+    useState(false);
 
-  const [result, setResult] =
-    useState<SaveResult | null>(null);
+  const [message, setMessage] =
+    useState("");
 
-  function addAssociation() {
-    setAssociations((current) => [
-      ...current,
-      {
-        id: Date.now(),
-        type: "name",
-        value: "",
-      },
-    ]);
-  }
+  const [error, setError] =
+    useState("");
 
-  function removeAssociation(id: number) {
-    setAssociations((current) =>
-      current.filter(
-        (association) => association.id !== id,
-      ),
-    );
-  }
-
-  function updateAssociation(
-    id: number,
-    field: "type" | "value",
-    value: string,
-  ) {
-    setAssociations((current) =>
-      current.map((association) =>
-        association.id === id
-          ? {
-              ...association,
-              [field]: value,
-            }
-          : association,
-      ),
-    );
-  }
+  const [addedIdentifiers, setAddedIdentifiers] =
+    useState<AddedIdentifier[]>([]);
 
   /*
-   * Vérification du pseudo principal.
+   * Vérification avant ajout.
    */
   async function handleVerify() {
+    const trimmedValue = value.trim();
+
     setError("");
     setMessage("");
-    setResult(null);
     setVerification(null);
 
-    if (!mainPseudo.trim()) {
+    if (!trimmedValue) {
       setError(
-        "Entre d'abord un pseudo à vérifier.",
+        "Entre d'abord un nom ou un pseudo.",
       );
       return;
     }
@@ -110,8 +75,8 @@ export default function AssoPage() {
     try {
       const response = await fetch(
         `/api/admin/asso?q=${encodeURIComponent(
-          mainPseudo.trim(),
-        )}`,
+          trimmedValue,
+        )}&type=${type}`,
         {
           method: "GET",
           cache: "no-store",
@@ -123,8 +88,8 @@ export default function AssoPage() {
 
       if (!response.ok) {
         setError(
-          data.error ||
-            "Impossible de vérifier le pseudo.",
+          data.error ??
+            "Impossible de vérifier cet identifiant.",
         );
         return;
       }
@@ -142,21 +107,21 @@ export default function AssoPage() {
   }
 
   /*
-   * Enregistrement.
+   * Ajout d'un identifiant indépendant.
    */
-  async function handleSubmit(
-    event: React.FormEvent<HTMLFormElement>,
-  ) {
-    event.preventDefault();
+  async function handleAdd() {
+    const trimmedValue = value.trim();
 
-    setMessage("");
     setError("");
-    setResult(null);
+    setMessage("");
 
-    /*
-     * Sécurité :
-     * impossible d'enregistrer sans avoir vérifié.
-     */
+    if (!trimmedValue) {
+      setError(
+        "Entre d'abord un nom ou un pseudo.",
+      );
+      return;
+    }
+
     if (!verification) {
       setError(
         "Clique d'abord sur « Vérifier ».",
@@ -164,24 +129,14 @@ export default function AssoPage() {
       return;
     }
 
-    if (!mainPseudo.trim()) {
+    if (verification.found) {
       setError(
-        "Le pseudo principal est obligatoire.",
+        "Cet identifiant existe déjà dans la base.",
       );
       return;
     }
 
-    const cleanedAssociations = associations
-      .filter(
-        (association) =>
-          association.value.trim(),
-      )
-      .map((association) => ({
-        type: association.type,
-        value: association.value.trim(),
-      }));
-
-    setLoading(true);
+    setSaving(true);
 
     try {
       const response = await fetch(
@@ -192,8 +147,8 @@ export default function AssoPage() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            mainPseudo: mainPseudo.trim(),
-            associations: cleanedAssociations,
+            type,
+            value: trimmedValue,
           }),
         },
       );
@@ -203,41 +158,67 @@ export default function AssoPage() {
 
       if (!response.ok) {
         setError(
-          data.error ||
-            "Une erreur est survenue.",
+          data.error ??
+            "Impossible d'ajouter cet identifiant.",
         );
         return;
       }
 
-      setResult(data);
+      if (data.alreadyExists) {
+        setError(
+          "Cet identifiant existe déjà dans la base.",
+        );
 
-      setMessage(
-        "Les associations ont bien été enregistrées.",
-      );
+        /*
+         * On met à jour la vérification pour refléter
+         * l'état réel de la base.
+         */
+        setVerification({
+          found: true,
+          identifier: data.identifier
+            ? {
+                id: data.identifier.id,
+                profileId:
+                  data.identifier.id,
+                type: data.identifier.type,
+                value: data.identifier.value,
+              }
+            : null,
+        });
 
-      /*
-       * On conserve le pseudo principal
-       * pour permettre d'ajouter facilement
-       * d'autres associations.
-       */
-      setAssociations([
-        {
-          id: Date.now(),
-          type: "pseudo",
-          value: "",
-        },
-      ]);
+        return;
+      }
 
-      /*
-       * On remet à jour la vérification
-       * avec les nouvelles données.
-       */
-      setVerification({
-        found: true,
-        profileId: data.profileId,
-        pseudos: data.pseudos ?? [],
-        names: data.names ?? [],
-      });
+      if (
+        data.created &&
+        data.identifier
+      ) {
+        setAddedIdentifiers((current) => [
+          data.identifier!,
+          ...current.filter(
+            (item) =>
+              item.id !==
+              data.identifier!.id,
+          ),
+        ]);
+
+        setMessage(
+          "L'identifiant a bien été ajouté à la base.",
+        );
+
+        setVerification({
+          found: true,
+          identifier: data.identifier
+            ? {
+                id: data.identifier.id,
+                profileId:
+                  data.identifier.id,
+                type: data.identifier.type,
+                value: data.identifier.value,
+              }
+            : null,
+        });
+      }
     } catch (requestError) {
       console.error(requestError);
 
@@ -245,8 +226,30 @@ export default function AssoPage() {
         "Impossible de contacter le serveur.",
       );
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
+  }
+
+  /*
+   * Quand la valeur ou le type change,
+   * l'ancienne vérification n'est plus valable.
+   */
+  function handleTypeChange(
+    nextType: IdentifierType,
+  ) {
+    setType(nextType);
+    setVerification(null);
+    setMessage("");
+    setError("");
+  }
+
+  function handleValueChange(
+    nextValue: string,
+  ) {
+    setValue(nextValue);
+    setVerification(null);
+    setMessage("");
+    setError("");
   }
 
   return (
@@ -254,163 +257,151 @@ export default function AssoPage() {
       <div className="mx-auto max-w-3xl">
         <div className="mb-8">
           <h1 className="text-3xl font-bold">
-            Ajouter des associations
+            Gestion des identifiants
           </h1>
 
           <p className="mt-2 text-sm text-slate-400">
-            Vérifie d'abord le pseudo, puis ajoute les
-            pseudos ou noms associés.
+            Ajoute séparément les pseudos et noms
+            Facebook signalés.
           </p>
         </div>
 
-        <form
-          onSubmit={handleSubmit}
-          className="rounded-2xl border border-slate-700 bg-slate-900/80 p-6 shadow-xl"
-        >
-          {/* Pseudo principal */}
-          <div>
-            <label
-              htmlFor="mainPseudo"
-              className="mb-2 block text-sm font-semibold text-slate-200"
-            >
-              Pseudo principal
-            </label>
-
-            <div className="flex gap-3">
-              <input
-                id="mainPseudo"
-                type="text"
-                value={mainPseudo}
-                onChange={(event) => {
-                  setMainPseudo(
-                    event.target.value,
-                  );
-
-                  /*
-                   * Si le pseudo change,
-                   * la vérification précédente
-                   * n'est plus valable.
-                   */
-                  setVerification(null);
-                  setResult(null);
-                  setMessage("");
-                  setError("");
-                }}
-                placeholder="@pseudo"
-                className="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition focus:border-blue-500"
-              />
-
-              <button
-                type="button"
-                onClick={handleVerify}
-                disabled={verifying}
-                className="rounded-xl bg-blue-600 px-6 py-3 font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+        {/* Ajout */}
+        <section className="rounded-2xl border border-slate-700 bg-slate-900/80 p-6 shadow-xl">
+          <div className="grid gap-5 md:grid-cols-[180px_1fr]">
+            {/* Type */}
+            <div>
+              <label
+                htmlFor="identifier-type"
+                className="mb-2 block text-sm font-semibold text-slate-200"
               >
-                {verifying
-                  ? "Vérification..."
-                  : "Vérifier"}
-              </button>
+                Type
+              </label>
+
+              <select
+                id="identifier-type"
+                value={type}
+                onChange={(event) =>
+                  handleTypeChange(
+                    event.target
+                      .value as IdentifierType,
+                  )
+                }
+                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-blue-500"
+              >
+                <option value="pseudo">
+                  Pseudo
+                </option>
+
+                <option value="name">
+                  Nom Facebook
+                </option>
+              </select>
             </div>
 
-            <p className="mt-2 text-xs text-slate-500">
-              Le symbole @ sera ajouté automatiquement
-              pour un pseudo.
-            </p>
+            {/* Valeur */}
+            <div>
+              <label
+                htmlFor="identifier-value"
+                className="mb-2 block text-sm font-semibold text-slate-200"
+              >
+                Identifiant
+              </label>
+
+              <input
+                id="identifier-value"
+                type="text"
+                value={value}
+                onChange={(event) =>
+                  handleValueChange(
+                    event.target.value,
+                  )
+                }
+                placeholder={
+                  type === "pseudo"
+                    ? "@portopetro26"
+                    : "Manuel Cervera"
+                }
+                className="w-full rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none transition focus:border-blue-500"
+              />
+
+              <p className="mt-2 text-xs text-slate-500">
+                {type === "pseudo"
+                  ? "Le @ sera ajouté automatiquement s'il manque."
+                  : "Entre le nom tel qu'il apparaît sur Facebook."}
+              </p>
+            </div>
           </div>
+
+          {/* Vérification */}
+          <button
+            type="button"
+            onClick={handleVerify}
+            disabled={
+              verifying || !value.trim()
+            }
+            className="mt-6 w-full rounded-xl border border-slate-600 bg-slate-800 px-5 py-3 font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {verifying
+              ? "Vérification..."
+              : "🔎 Vérifier"}
+          </button>
 
           {/* Résultat vérification */}
           {verification && (
             <div className="mt-5">
               {verification.found ? (
-                <div className="rounded-xl border border-emerald-700/50 bg-emerald-950/30 p-4">
-                  <div className="flex items-center gap-2">
+                <div className="rounded-xl border border-amber-700/50 bg-amber-950/30 p-4">
+                  <div className="flex items-start gap-3">
                     <span className="text-xl">
-                      🟢
+                      🟠
                     </span>
 
-                    <div>
-                      <p className="font-semibold text-emerald-300">
-                        Profil déjà présent
+                    <div className="min-w-0">
+                      <p className="font-semibold text-amber-300">
+                        Identifiant déjà présent
                       </p>
 
-                      <p className="text-xs text-emerald-400/70">
-                        Ce pseudo existe déjà dans la
-                        base.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 grid gap-4 md:grid-cols-2">
-                    <div>
-                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-blue-400">
-                        Pseudos associés
+                      <p className="mt-1 text-sm text-amber-200/80">
+                        Cet identifiant existe déjà
+                        dans la base.
                       </p>
 
-                      {verification.pseudos &&
-                      verification.pseudos.length >
-                        0 ? (
-                        <div className="space-y-2">
-                          {verification.pseudos.map(
-                            (pseudo) => (
-                              <div
-                                key={pseudo}
-                                className="rounded-lg bg-slate-950 px-3 py-2 text-sm"
-                              >
-                                {pseudo}
-                              </div>
-                            ),
-                          )}
+                      {verification.identifier && (
+                        <div className="mt-3 rounded-lg bg-slate-950 px-3 py-2">
+                          <div className="font-medium text-white">
+                            {
+                              verification
+                                .identifier.value
+                            }
+                          </div>
+
+                          <div className="mt-1 text-xs text-slate-500">
+                            {verification.identifier.type ===
+                            "pseudo"
+                              ? "Pseudo"
+                              : "Nom Facebook"}
+                          </div>
                         </div>
-                      ) : (
-                        <p className="text-sm text-slate-500">
-                          Aucun autre pseudo.
-                        </p>
-                      )}
-                    </div>
-
-                    <div>
-                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-purple-400">
-                        Noms associés
-                      </p>
-
-                      {verification.names &&
-                      verification.names.length >
-                        0 ? (
-                        <div className="space-y-2">
-                          {verification.names.map(
-                            (name) => (
-                              <div
-                                key={name}
-                                className="rounded-lg bg-slate-950 px-3 py-2 text-sm"
-                              >
-                                {name}
-                              </div>
-                            ),
-                          )}
-                        </div>
-                      ) : (
-                        <p className="text-sm text-slate-500">
-                          Aucun nom associé.
-                        </p>
                       )}
                     </div>
                   </div>
                 </div>
               ) : (
                 <div className="rounded-xl border border-blue-700/50 bg-blue-950/30 p-4">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-start gap-3">
                     <span className="text-xl">
                       🔵
                     </span>
 
                     <div>
                       <p className="font-semibold text-blue-300">
-                        Nouveau pseudo
+                        Nouvel identifiant
                       </p>
 
-                      <p className="text-xs text-blue-400/70">
-                        Aucun profil existant pour ce
-                        pseudo.
+                      <p className="mt-1 text-sm text-blue-200/80">
+                        Cet identifiant n'existe pas
+                        encore dans la base.
                       </p>
                     </div>
                   </div>
@@ -419,208 +410,76 @@ export default function AssoPage() {
             </div>
           )}
 
-          {/* Associations */}
-          <div className="mt-8">
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold">
-                  Identifiants associés
-                </h2>
-
-                <p className="mt-1 text-xs text-slate-500">
-                  Ajoute les autres pseudos ou noms de cette
-                  même personne.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={addAssociation}
-                className="rounded-lg border border-slate-600 bg-slate-800 px-4 py-2 text-sm font-semibold transition hover:bg-slate-700"
-              >
-                + Ajouter
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              {associations.map(
-                (association, index) => (
-                  <div
-                    key={association.id}
-                    className="flex gap-3"
-                  >
-                    <select
-                      value={association.type}
-                      onChange={(event) =>
-                        updateAssociation(
-                          association.id,
-                          "type",
-                          event.target.value,
-                        )
-                      }
-                      className="w-32 rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-white outline-none focus:border-blue-500"
-                    >
-                      <option value="pseudo">
-                        Pseudo
-                      </option>
-
-                      <option value="name">
-                        Nom
-                      </option>
-                    </select>
-
-                    <input
-                      type="text"
-                      value={association.value}
-                      onChange={(event) =>
-                        updateAssociation(
-                          association.id,
-                          "value",
-                          event.target.value,
-                        )
-                      }
-                      placeholder={
-                        association.type ===
-                        "pseudo"
-                          ? "@autrepseudo"
-                          : "Nom Facebook"
-                      }
-                      className="min-w-0 flex-1 rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-blue-500"
-                    />
-
-                    {associations.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          removeAssociation(
-                            association.id,
-                          )
-                        }
-                        className="rounded-xl border border-red-900/50 bg-red-950/30 px-4 text-sm text-red-400 transition hover:bg-red-950/60"
-                        aria-label={`Supprimer l'association ${
-                          index + 1
-                        }`}
-                      >
-                        ✕
-                      </button>
-                    )}
-                  </div>
-                ),
-              )}
-            </div>
-          </div>
-
           {/* Erreur */}
           {error && (
-            <div className="mt-6 rounded-xl border border-red-800/50 bg-red-950/30 px-4 py-3 text-sm text-red-300">
+            <div className="mt-5 rounded-xl border border-red-800/50 bg-red-950/30 px-4 py-3 text-sm text-red-300">
               {error}
             </div>
           )}
 
           {/* Succès */}
           {message && (
-            <div className="mt-6 rounded-xl border border-emerald-800/50 bg-emerald-950/30 px-4 py-3 text-sm text-emerald-300">
+            <div className="mt-5 rounded-xl border border-emerald-800/50 bg-emerald-950/30 px-4 py-3 text-sm text-emerald-300">
               {message}
             </div>
           )}
 
-          {/* Enregistrer */}
+          {/* Ajouter */}
           <button
-            type="submit"
+            type="button"
+            onClick={handleAdd}
             disabled={
-              loading || !verification
+              saving ||
+              !verification ||
+              verification.found ||
+              !value.trim()
             }
-            className="mt-8 w-full rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
+            className="mt-6 w-full rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {loading
-              ? "Enregistrement..."
-              : "Enregistrer les associations"}
+            {saving
+              ? "Ajout en cours..."
+              : "+ Ajouter à la base"}
           </button>
-        </form>
+        </section>
 
-        {/* Résultat après enregistrement */}
-        {result?.success && (
+        {/* Ajouts de cette session */}
+        {addedIdentifiers.length > 0 && (
           <section className="mt-8 rounded-2xl border border-slate-700 bg-slate-900/80 p-6">
             <h2 className="text-lg font-semibold">
-              Profil enregistré
+              Ajouts de cette session
             </h2>
 
-            {result.profileId && (
-              <p className="mt-2 break-all text-xs text-slate-500">
-                Profil : {result.profileId}
-              </p>
-            )}
+            <p className="mt-1 text-sm text-slate-500">
+              Chaque identifiant est indépendant.
+            </p>
 
-            <div className="mt-6 grid gap-6 md:grid-cols-2">
-              {/* Pseudos */}
-              <div>
-                <h3 className="mb-3 text-sm font-semibold text-blue-400">
-                  Pseudos
-                </h3>
+            <div className="mt-5 space-y-3">
+              {addedIdentifiers.map(
+                (identifier) => (
+                  <div
+                    key={identifier.id}
+                    className="flex items-center justify-between gap-4 rounded-xl bg-slate-950 px-4 py-3"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate font-medium text-white">
+                        {identifier.value}
+                      </div>
 
-                {result.pseudos &&
-                result.pseudos.length > 0 ? (
-                  <div className="space-y-2">
-                    {result.pseudos.map(
-                      (pseudo) => (
-                        <div
-                          key={pseudo}
-                          className="rounded-lg bg-slate-950 px-3 py-2 text-sm"
-                        >
-                          {pseudo}
-                        </div>
-                      ),
-                    )}
+                      <div className="mt-1 text-xs text-slate-500">
+                        {identifier.type ===
+                        "pseudo"
+                          ? "Pseudo"
+                          : "Nom Facebook"}
+                      </div>
+                    </div>
+
+                    <span className="shrink-0 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-400">
+                      Ajouté
+                    </span>
                   </div>
-                ) : (
-                  <p className="text-sm text-slate-500">
-                    Aucun pseudo.
-                  </p>
-                )}
-              </div>
-
-              {/* Noms */}
-              <div>
-                <h3 className="mb-3 text-sm font-semibold text-purple-400">
-                  Noms associés
-                </h3>
-
-                {result.names &&
-                result.names.length > 0 ? (
-                  <div className="space-y-2">
-                    {result.names.map(
-                      (name) => (
-                        <div
-                          key={name}
-                          className="rounded-lg bg-slate-950 px-3 py-2 text-sm"
-                        >
-                          {name}
-                        </div>
-                      ),
-                    )}
-                  </div>
-                ) : (
-                  <p className="text-sm text-slate-500">
-                    Aucun nom associé.
-                  </p>
-                )}
-              </div>
-            </div>
-
-            {result.alreadyPresent &&
-              result.alreadyPresent.length > 0 && (
-                <div className="mt-6 rounded-xl border border-yellow-800/40 bg-yellow-950/20 p-4">
-                  <p className="text-sm font-semibold text-yellow-400">
-                    Déjà présents
-                  </p>
-
-                  <p className="mt-2 text-sm text-yellow-200/80">
-                    {result.alreadyPresent.join(
-                      ", ",
-                    )}
-                  </p>
-                </div>
+                ),
               )}
+            </div>
           </section>
         )}
       </div>
