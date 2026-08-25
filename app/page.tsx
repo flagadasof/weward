@@ -438,7 +438,7 @@ export default function HomePage() {
   </p>
 
   <p className="mt-1 text-xs text-slate-700">
-    Ce site est indépendant de WeWard. By Flagada
+    Ce site est indépendant de WeWard.
   </p>
 </div>
         </div>
