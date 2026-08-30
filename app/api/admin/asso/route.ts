@@ -69,18 +69,10 @@ function formatValue(
 /**
  * GET
  *
- * Vérifie si un identifiant existe exactement.
+ * Vérifie si un identifiant exact existe déjà.
  *
- * La vérification cherche maintenant dans LES DEUX TYPES :
- * - pseudo
- * - nom Facebook
- *
- * Cela évite qu'un mauvais choix dans le sélecteur
- * empêche de retrouver un identifiant déjà présent.
- *
- * Exemple :
- * /api/admin/asso?q=@yaya77
- * /api/admin/asso?q=Manuel%20Cervera
+ * La recherche est faite dans les pseudos ET
+ * dans les noms Facebook.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -107,10 +99,6 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    /*
-     * On cherche d'abord une correspondance exacte
-     * dans les pseudos ET les noms.
-     */
     const {
       data: identifiers,
       error,
@@ -146,21 +134,22 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    /*
-     * On prend la première correspondance exacte.
-     */
     const identifier =
-      (identifiers?.[0] as Identifier | undefined) ??
-      null;
+      (identifiers?.[0] as
+        | Identifier
+        | undefined) ?? null;
 
     return NextResponse.json({
       found: Boolean(identifier),
       identifier: identifier
         ? {
             id: identifier.id,
-            profileId: identifier.profile_id,
-            type: identifier.identifier_type,
-            value: identifier.value,
+            profileId:
+              identifier.profile_id,
+            type:
+              identifier.identifier_type,
+            value:
+              identifier.value,
           }
         : null,
     });
@@ -185,12 +174,6 @@ export async function GET(request: NextRequest) {
  * POST
  *
  * Ajoute UN identifiant indépendant.
- *
- * Body :
- * {
- *   "type": "pseudo",
- *   "value": "@yaya77"
- * }
  */
 export async function POST(request: NextRequest) {
   try {
@@ -252,7 +235,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    /*
+    /**
      * Vérification d'un doublon exact
      * sur le même type.
      */
@@ -309,7 +292,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    /*
+    /**
      * Création d'un profil indépendant.
      */
     const {
@@ -340,7 +323,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    /*
+    /**
      * Création de l'identifiant.
      */
     const {
@@ -369,9 +352,9 @@ export async function POST(request: NextRequest) {
         identifierError,
       );
 
-      /*
-       * Nettoyage du profil si l'identifiant
-       * n'a pas pu être créé.
+      /**
+       * Nettoyage du profil si
+       * l'identifiant n'a pas pu être créé.
        */
       await supabase
         .from("reported_profiles")
@@ -425,8 +408,10 @@ export async function POST(request: NextRequest) {
  *
  * Supprime uniquement l'identifiant demandé.
  *
- * Exemple :
- * /api/admin/asso?q=@caramal666&type=pseudo
+ * IMPORTANT :
+ * la suppression recherche maintenant dans les
+ * pseudos ET les noms Facebook, indépendamment
+ * du type choisi dans l'interface.
  */
 export async function DELETE(
   request: NextRequest,
@@ -435,14 +420,6 @@ export async function DELETE(
     const query = request.nextUrl.searchParams
       .get("q")
       ?.trim();
-
-    const typeParam =
-      request.nextUrl.searchParams.get("type");
-
-    const type: IdentifierType =
-      typeParam === "name"
-        ? "name"
-        : "pseudo";
 
     if (!query) {
       return NextResponse.json(
@@ -461,11 +438,21 @@ export async function DELETE(
     const normalizedQuery =
       normalizeValue(query);
 
-    /*
-     * Recherche exacte du type demandé.
+    if (!normalizedQuery) {
+      return NextResponse.json({
+        success: false,
+        deleted: false,
+        found: false,
+        message:
+          "Identifiant invalide.",
+      });
+    }
+
+    /**
+     * Recherche exacte dans les DEUX types.
      */
     const {
-      data: identifier,
+      data: identifiers,
       error: searchError,
     } = await supabase
       .from("profile_identifiers")
@@ -473,15 +460,14 @@ export async function DELETE(
         "id, profile_id, identifier_type, value, normalized_value",
       )
       .eq(
-        "identifier_type",
-        type,
-      )
-      .eq(
         "normalized_value",
         normalizedQuery,
       )
-      .limit(1)
-      .maybeSingle();
+      .in("identifier_type", [
+        "pseudo",
+        "name",
+      ])
+      .limit(10);
 
     if (searchError) {
       console.error(
@@ -500,6 +486,14 @@ export async function DELETE(
       );
     }
 
+    /**
+     * On prend l'identifiant exact trouvé.
+     */
+    const identifier =
+      (identifiers?.[0] as
+        | Identifier
+        | undefined) ?? null;
+
     if (!identifier) {
       return NextResponse.json({
         success: false,
@@ -510,8 +504,11 @@ export async function DELETE(
       });
     }
 
-    /*
-     * Suppression de l'identifiant uniquement.
+    /**
+     * Suppression de cette ligne uniquement.
+     *
+     * Aucun autre identifiant n'est supprimé.
+     * Aucun reported_profile n'est supprimé.
      */
     const {
       error: deleteError,
