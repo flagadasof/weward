@@ -105,16 +105,21 @@ export async function GET(request: NextRequest) {
     const normalizedQuery =
       normalizeValue(query);
 
-    const { data: identifier, error } =
-      await supabase
-        .from("profile_identifiers")
-        .select(
-          "id, profile_id, identifier_type, value, normalized_value",
-        )
-        .eq("identifier_type", type)
-        .eq("normalized_value", normalizedQuery)
-        .limit(1)
-        .maybeSingle();
+    const {
+      data: identifier,
+      error,
+    } = await supabase
+      .from("profile_identifiers")
+      .select(
+        "id, profile_id, identifier_type, value, normalized_value",
+      )
+      .eq("identifier_type", type)
+      .eq(
+        "normalized_value",
+        normalizedQuery,
+      )
+      .limit(1)
+      .maybeSingle();
 
     if (error) {
       console.error(
@@ -138,8 +143,10 @@ export async function GET(request: NextRequest) {
       identifier: identifier
         ? {
             id: identifier.id,
-            profileId: identifier.profile_id,
-            type: identifier.identifier_type,
+            profileId:
+              identifier.profile_id,
+            type:
+              identifier.identifier_type,
             value: identifier.value,
           }
         : null,
@@ -177,7 +184,9 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
 
     const type: IdentifierType =
-      body.type === "name" ? "name" : "pseudo";
+      body.type === "name"
+        ? "name"
+        : "pseudo";
 
     const rawValue =
       typeof body.value === "string"
@@ -187,7 +196,8 @@ export async function POST(request: NextRequest) {
     if (!rawValue) {
       return NextResponse.json(
         {
-          error: "L'identifiant est obligatoire.",
+          error:
+            "L'identifiant est obligatoire.",
         },
         {
           status: 400,
@@ -220,7 +230,8 @@ export async function POST(request: NextRequest) {
     if (!normalizedValue) {
       return NextResponse.json(
         {
-          error: "L'identifiant est invalide.",
+          error:
+            "L'identifiant est invalide.",
         },
         {
           status: 400,
@@ -240,8 +251,14 @@ export async function POST(request: NextRequest) {
       .select(
         "id, profile_id, identifier_type, value, normalized_value",
       )
-      .eq("identifier_type", type)
-      .eq("normalized_value", normalizedValue)
+      .eq(
+        "identifier_type",
+        type,
+      )
+      .eq(
+        "normalized_value",
+        normalizedValue,
+      )
       .limit(1)
       .maybeSingle();
 
@@ -273,7 +290,8 @@ export async function POST(request: NextRequest) {
             existingIdentifier.profile_id,
           type:
             existingIdentifier.identifier_type,
-          value: existingIdentifier.value,
+          value:
+            existingIdentifier.value,
         },
       });
     }
@@ -321,14 +339,18 @@ export async function POST(request: NextRequest) {
         profile_id: newProfile.id,
         identifier_type: type,
         value,
-        normalized_value: normalizedValue,
+        normalized_value:
+          normalizedValue,
       })
       .select(
         "id, profile_id, identifier_type, value, normalized_value",
       )
       .single();
 
-    if (identifierError || !newIdentifier) {
+    if (
+      identifierError ||
+      !newIdentifier
+    ) {
       console.error(
         "Erreur création identifiant :",
         identifierError,
@@ -370,6 +392,160 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error(
       "Erreur POST /api/admin/asso :",
+      error,
+    );
+
+    return NextResponse.json(
+      {
+        error: "Erreur serveur.",
+      },
+      {
+        status: 500,
+      },
+    );
+  }
+}
+
+/**
+ * DELETE
+ *
+ * Supprime UNIQUEMENT l'identifiant demandé.
+ *
+ * Exemple :
+ * /api/admin/asso?q=@caramal666&type=pseudo
+ */
+export async function DELETE(
+  request: NextRequest,
+) {
+  try {
+    const query = request.nextUrl.searchParams
+      .get("q")
+      ?.trim();
+
+    const typeParam =
+      request.nextUrl.searchParams.get("type");
+
+    const type: IdentifierType =
+      typeParam === "name"
+        ? "name"
+        : "pseudo";
+
+    if (!query) {
+      return NextResponse.json(
+        {
+          error:
+            "L'identifiant à supprimer est obligatoire.",
+        },
+        {
+          status: 400,
+        },
+      );
+    }
+
+    const supabase = getSupabaseAdmin();
+
+    const normalizedQuery =
+      normalizeValue(query);
+
+    /**
+     * Recherche exacte.
+     */
+    const {
+      data: identifier,
+      error: searchError,
+    } = await supabase
+      .from("profile_identifiers")
+      .select(
+        "id, profile_id, identifier_type, value, normalized_value",
+      )
+      .eq(
+        "identifier_type",
+        type,
+      )
+      .eq(
+        "normalized_value",
+        normalizedQuery,
+      )
+      .limit(1)
+      .maybeSingle();
+
+    if (searchError) {
+      console.error(
+        "Erreur recherche suppression :",
+        searchError,
+      );
+
+      return NextResponse.json(
+        {
+          error:
+            "Impossible de rechercher cet identifiant.",
+        },
+        {
+          status: 500,
+        },
+      );
+    }
+
+    if (!identifier) {
+      return NextResponse.json({
+        success: false,
+        deleted: false,
+        found: false,
+        message:
+          "Identifiant introuvable.",
+      });
+    }
+
+    /**
+     * Suppression de l'identifiant uniquement.
+     *
+     * Le reported_profile n'est PAS supprimé.
+     * Les autres identifiants éventuels restent
+     * donc intacts.
+     */
+    const {
+      error: deleteError,
+    } = await supabase
+      .from("profile_identifiers")
+      .delete()
+      .eq("id", identifier.id);
+
+    if (deleteError) {
+      console.error(
+        "Erreur suppression identifiant :",
+        deleteError,
+      );
+
+      return NextResponse.json(
+        {
+          error:
+            "Impossible de supprimer cet identifiant.",
+        },
+        {
+          status: 500,
+        },
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      deleted: true,
+      found: true,
+      identifier: {
+        id: identifier.id,
+        profileId:
+          identifier.profile_id,
+        type:
+          identifier.identifier_type,
+        value:
+          identifier.value,
+      },
+      message:
+        "Identifiant supprimé.",
+    });
+  } catch (error) {
+    console.error(
+      "Erreur DELETE /api/admin/asso :",
       error,
     );
 
