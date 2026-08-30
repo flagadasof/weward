@@ -31,10 +31,10 @@ function getSupabaseAdmin() {
 }
 
 /**
- * Normalisation commune aux recherches.
+ * Normalisation utilisée pour la recherche.
  *
- * @Yaya77        -> yaya77
- * Stéphanie      -> stephanie
+ * @Yaya77 -> yaya77
+ * Stéphanie Millan -> stephanie millan
  */
 function normalizeValue(value: string) {
   return value
@@ -47,9 +47,7 @@ function normalizeValue(value: string) {
 }
 
 /**
- * Formatage de la valeur affichée.
- *
- * Pour un pseudo, on ajoute automatiquement @.
+ * Formatage de la valeur enregistrée.
  */
 function formatValue(
   value: string,
@@ -71,13 +69,18 @@ function formatValue(
 /**
  * GET
  *
- * Vérifie si un identifiant exact existe déjà.
+ * Vérifie si un identifiant existe exactement.
+ *
+ * La vérification cherche maintenant dans LES DEUX TYPES :
+ * - pseudo
+ * - nom Facebook
+ *
+ * Cela évite qu'un mauvais choix dans le sélecteur
+ * empêche de retrouver un identifiant déjà présent.
  *
  * Exemple :
- * /api/admin/asso?q=@yaya77&type=pseudo
- *
- * ou :
- * /api/admin/asso?q=Yannick%20Beck&type=name
+ * /api/admin/asso?q=@yaya77
+ * /api/admin/asso?q=Manuel%20Cervera
  */
 export async function GET(request: NextRequest) {
   try {
@@ -85,19 +88,11 @@ export async function GET(request: NextRequest) {
       .get("q")
       ?.trim();
 
-    const typeParam =
-      request.nextUrl.searchParams.get("type");
-
-    const type: IdentifierType =
-      typeParam === "name" ? "name" : "pseudo";
-
     if (!query) {
-      return NextResponse.json(
-        {
-          found: false,
-          identifier: null,
-        },
-      );
+      return NextResponse.json({
+        found: false,
+        identifier: null,
+      });
     }
 
     const supabase = getSupabaseAdmin();
@@ -105,21 +100,34 @@ export async function GET(request: NextRequest) {
     const normalizedQuery =
       normalizeValue(query);
 
+    if (!normalizedQuery) {
+      return NextResponse.json({
+        found: false,
+        identifier: null,
+      });
+    }
+
+    /*
+     * On cherche d'abord une correspondance exacte
+     * dans les pseudos ET les noms.
+     */
     const {
-      data: identifier,
+      data: identifiers,
       error,
     } = await supabase
       .from("profile_identifiers")
       .select(
         "id, profile_id, identifier_type, value, normalized_value",
       )
-      .eq("identifier_type", type)
       .eq(
         "normalized_value",
         normalizedQuery,
       )
-      .limit(1)
-      .maybeSingle();
+      .in("identifier_type", [
+        "pseudo",
+        "name",
+      ])
+      .limit(10);
 
     if (error) {
       console.error(
@@ -138,15 +146,20 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    /*
+     * On prend la première correspondance exacte.
+     */
+    const identifier =
+      (identifiers?.[0] as Identifier | undefined) ??
+      null;
+
     return NextResponse.json({
       found: Boolean(identifier),
       identifier: identifier
         ? {
             id: identifier.id,
-            profileId:
-              identifier.profile_id,
-            type:
-              identifier.identifier_type,
+            profileId: identifier.profile_id,
+            type: identifier.identifier_type,
             value: identifier.value,
           }
         : null,
@@ -239,7 +252,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    /**
+    /*
      * Vérification d'un doublon exact
      * sur le même type.
      */
@@ -296,7 +309,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    /**
+    /*
      * Création d'un profil indépendant.
      */
     const {
@@ -327,7 +340,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    /**
+    /*
      * Création de l'identifiant.
      */
     const {
@@ -356,9 +369,9 @@ export async function POST(request: NextRequest) {
         identifierError,
       );
 
-      /**
-       * Nettoyage du profil si
-       * l'identifiant n'a pas pu être créé.
+      /*
+       * Nettoyage du profil si l'identifiant
+       * n'a pas pu être créé.
        */
       await supabase
         .from("reported_profiles")
@@ -386,7 +399,8 @@ export async function POST(request: NextRequest) {
           newIdentifier.profile_id,
         type:
           newIdentifier.identifier_type,
-        value: newIdentifier.value,
+        value:
+          newIdentifier.value,
       },
     });
   } catch (error) {
@@ -409,7 +423,7 @@ export async function POST(request: NextRequest) {
 /**
  * DELETE
  *
- * Supprime UNIQUEMENT l'identifiant demandé.
+ * Supprime uniquement l'identifiant demandé.
  *
  * Exemple :
  * /api/admin/asso?q=@caramal666&type=pseudo
@@ -447,8 +461,8 @@ export async function DELETE(
     const normalizedQuery =
       normalizeValue(query);
 
-    /**
-     * Recherche exacte.
+    /*
+     * Recherche exacte du type demandé.
      */
     const {
       data: identifier,
@@ -496,12 +510,8 @@ export async function DELETE(
       });
     }
 
-    /**
+    /*
      * Suppression de l'identifiant uniquement.
-     *
-     * Le reported_profile n'est PAS supprimé.
-     * Les autres identifiants éventuels restent
-     * donc intacts.
      */
     const {
       error: deleteError,
