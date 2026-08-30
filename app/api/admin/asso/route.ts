@@ -99,49 +99,52 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const {
-      data: identifiers,
-      error,
-    } = await supabase
-      .from("profile_identifiers")
-      .select(
-        "id, profile_id, identifier_type, value, normalized_value",
-      )
-      .in("identifier_type", [
-        "pseudo",
-        "name",
-      ])
-      .limit(5000);
+    const PAGE_SIZE = 1000;
+    let from = 0;
 
-    if (error) {
-      console.error(
-        "Erreur récupération identifiants :",
+    while (true) {
+      const {
+        data: identifiers,
         error,
-      );
+      } = await supabase
+        .from("profile_identifiers")
+        .select(
+          "id, profile_id, identifier_type, value, normalized_value",
+        )
+        .range(
+          from,
+          from + PAGE_SIZE - 1,
+        );
 
-      return NextResponse.json(
-        {
-          error:
-            "Impossible de vérifier cet identifiant.",
-        },
-        {
-          status: 500,
-        },
-      );
-    }
+      if (error) {
+        console.error(
+          "Erreur récupération identifiants :",
+          error,
+        );
 
-    const matchingIdentifier =
-      (identifiers ?? []).find(
-        (identifier: Identifier) =>
-          normalizeValue(
-            identifier.value,
-          ) === normalizedQuery,
-      ) ?? null;
+        return NextResponse.json(
+          {
+            error:
+              "Impossible de vérifier cet identifiant.",
+          },
+          {
+            status: 500,
+          },
+        );
+      }
 
-    return NextResponse.json({
-      found: Boolean(matchingIdentifier),
-      identifier: matchingIdentifier
-        ? {
+      const matchingIdentifier =
+        (identifiers ?? []).find(
+          (identifier: Identifier) =>
+            normalizeValue(
+              identifier.value,
+            ) === normalizedQuery,
+        ) ?? null;
+
+      if (matchingIdentifier) {
+        return NextResponse.json({
+          found: true,
+          identifier: {
             id: matchingIdentifier.id,
             profileId:
               matchingIdentifier.profile_id,
@@ -149,8 +152,23 @@ export async function GET(request: NextRequest) {
               matchingIdentifier.identifier_type,
             value:
               matchingIdentifier.value,
-          }
-        : null,
+          },
+        });
+      }
+
+      if (
+        !identifiers ||
+        identifiers.length < PAGE_SIZE
+      ) {
+        break;
+      }
+
+      from += PAGE_SIZE;
+    }
+
+    return NextResponse.json({
+      found: false,
+      identifier: null,
     });
   } catch (error) {
     console.error(
@@ -448,107 +466,128 @@ export async function DELETE(
     }
 
     /*
-     * On récupère les identifiants existants.
-     *
-     * On ne fait volontairement PAS confiance uniquement
-     * à normalized_value, car certaines anciennes lignes
-     * peuvent avoir une normalisation différente.
+     * Comme pour le GET, on parcourt la table
+     * par pages de 1000 lignes.
      */
-    const {
-      data: identifiers,
-      error: searchError,
-    } = await supabase
-      .from("profile_identifiers")
-      .select(
-        "id, profile_id, identifier_type, value, normalized_value",
-      )
-      .limit(5000);
+    const PAGE_SIZE = 1000;
+    let from = 0;
 
-    if (searchError) {
-      console.error(
-        "Erreur récupération identifiants pour suppression :",
-        searchError,
-      );
+    while (true) {
+      const {
+        data: identifiers,
+        error: searchError,
+      } = await supabase
+        .from("profile_identifiers")
+        .select(
+          "id, profile_id, identifier_type, value, normalized_value",
+        )
+        .range(
+          from,
+          from + PAGE_SIZE - 1,
+        );
 
-      return NextResponse.json(
-        {
-          error:
-            "Impossible de rechercher cet identifiant.",
-        },
-        {
-          status: 500,
-        },
-      );
-    }
+      if (searchError) {
+        console.error(
+          "Erreur récupération identifiants pour suppression :",
+          searchError,
+        );
 
-    /*
-     * On cherche localement avec la même normalisation
-     * que le reste de l'application.
-     */
-    const matchingIdentifiers =
-      (identifiers ?? []).filter(
-        (identifier: Identifier) =>
-          normalizeValue(
-            identifier.value,
-          ) === normalizedQuery,
-      );
+        return NextResponse.json(
+          {
+            error:
+              "Impossible de rechercher cet identifiant.",
+          },
+          {
+            status: 500,
+          },
+        );
+      }
 
-    if (matchingIdentifiers.length === 0) {
-      return NextResponse.json({
-        success: false,
-        deleted: false,
-        found: false,
-        message:
-          "Identifiant introuvable.",
-      });
-    }
+      /*
+       * On compare la vraie valeur enregistrée
+       * après normalisation.
+       *
+       * Cela permet de retrouver :
+       * @wic72
+       * wic72
+       * @Wic72
+       */
+      const matchingIdentifier =
+        (identifiers ?? []).find(
+          (identifier: Identifier) =>
+            normalizeValue(
+              identifier.value,
+            ) === normalizedQuery,
+        ) ?? null;
 
-    /*
-     * On supprime uniquement la première correspondance.
-     * Aucun autre identifiant du profil n'est touché.
-     */
-    const identifier =
-      matchingIdentifiers[0] as Identifier;
+      if (matchingIdentifier) {
+        /*
+         * Suppression uniquement de cet identifiant.
+         */
+        const {
+          error: deleteError,
+        } = await supabase
+          .from("profile_identifiers")
+          .delete()
+          .eq(
+            "id",
+            matchingIdentifier.id,
+          );
 
-    const {
-      error: deleteError,
-    } = await supabase
-      .from("profile_identifiers")
-      .delete()
-      .eq("id", identifier.id);
+        if (deleteError) {
+          console.error(
+            "Erreur suppression identifiant :",
+            deleteError,
+          );
 
-    if (deleteError) {
-      console.error(
-        "Erreur suppression identifiant :",
-        deleteError,
-      );
+          return NextResponse.json(
+            {
+              error:
+                "Impossible de supprimer cet identifiant.",
+            },
+            {
+              status: 500,
+            },
+          );
+        }
 
-      return NextResponse.json(
-        {
-          error:
-            "Impossible de supprimer cet identifiant.",
-        },
-        {
-          status: 500,
-        },
-      );
+        return NextResponse.json({
+          success: true,
+          deleted: true,
+          found: true,
+          identifier: {
+            id: matchingIdentifier.id,
+            profileId:
+              matchingIdentifier.profile_id,
+            type:
+              matchingIdentifier.identifier_type,
+            value:
+              matchingIdentifier.value,
+          },
+          message:
+            "Identifiant supprimé.",
+        });
+      }
+
+      /*
+       * Fin de la table.
+       */
+      if (
+        !identifiers ||
+        identifiers.length < PAGE_SIZE
+      ) {
+        break;
+      }
+
+      from += PAGE_SIZE;
     }
 
     return NextResponse.json({
-      success: true,
-      deleted: true,
-      found: true,
-      identifier: {
-        id: identifier.id,
-        profileId:
-          identifier.profile_id,
-        type:
-          identifier.identifier_type,
-        value:
-          identifier.value,
-      },
+      success: false,
+      deleted: false,
+      found: false,
       message:
-        "Identifiant supprimé.",
+        "Identifiant introuvable.",
     });
   } catch (error) {
     console.error(
