@@ -448,8 +448,12 @@ export async function DELETE(
       });
     }
 
-    /**
-     * Recherche exacte dans les DEUX types.
+    /*
+     * On récupère les identifiants existants.
+     *
+     * On ne fait volontairement PAS confiance uniquement
+     * à normalized_value, car certaines anciennes lignes
+     * peuvent avoir une normalisation différente.
      */
     const {
       data: identifiers,
@@ -459,19 +463,11 @@ export async function DELETE(
       .select(
         "id, profile_id, identifier_type, value, normalized_value",
       )
-      .eq(
-        "normalized_value",
-        normalizedQuery,
-      )
-      .in("identifier_type", [
-        "pseudo",
-        "name",
-      ])
-      .limit(10);
+      .limit(5000);
 
     if (searchError) {
       console.error(
-        "Erreur recherche suppression :",
+        "Erreur récupération identifiants pour suppression :",
         searchError,
       );
 
@@ -486,15 +482,19 @@ export async function DELETE(
       );
     }
 
-    /**
-     * On prend l'identifiant exact trouvé.
+    /*
+     * On cherche localement avec la même normalisation
+     * que le reste de l'application.
      */
-    const identifier =
-      (identifiers?.[0] as
-        | Identifier
-        | undefined) ?? null;
+    const matchingIdentifiers =
+      (identifiers ?? []).filter(
+        (identifier: Identifier) =>
+          normalizeValue(
+            identifier.value,
+          ) === normalizedQuery,
+      );
 
-    if (!identifier) {
+    if (matchingIdentifiers.length === 0) {
       return NextResponse.json({
         success: false,
         deleted: false,
@@ -504,12 +504,13 @@ export async function DELETE(
       });
     }
 
-    /**
-     * Suppression de cette ligne uniquement.
-     *
-     * Aucun autre identifiant n'est supprimé.
-     * Aucun reported_profile n'est supprimé.
+    /*
+     * On supprime uniquement la première correspondance.
+     * Aucun autre identifiant du profil n'est touché.
      */
+    const identifier =
+      matchingIdentifiers[0] as Identifier;
+
     const {
       error: deleteError,
     } = await supabase
