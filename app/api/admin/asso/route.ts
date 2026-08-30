@@ -107,19 +107,15 @@ export async function GET(request: NextRequest) {
       .select(
         "id, profile_id, identifier_type, value, normalized_value",
       )
-      .eq(
-        "normalized_value",
-        normalizedQuery,
-      )
       .in("identifier_type", [
         "pseudo",
         "name",
       ])
-      .limit(10);
+      .limit(5000);
 
     if (error) {
       console.error(
-        "Erreur vérification identifiant :",
+        "Erreur récupération identifiants :",
         error,
       );
 
@@ -134,22 +130,25 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const identifier =
-      (identifiers?.[0] as
-        | Identifier
-        | undefined) ?? null;
+    const matchingIdentifier =
+      (identifiers ?? []).find(
+        (identifier: Identifier) =>
+          normalizeValue(
+            identifier.value,
+          ) === normalizedQuery,
+      ) ?? null;
 
     return NextResponse.json({
-      found: Boolean(identifier),
-      identifier: identifier
+      found: Boolean(matchingIdentifier),
+      identifier: matchingIdentifier
         ? {
-            id: identifier.id,
+            id: matchingIdentifier.id,
             profileId:
-              identifier.profile_id,
+              matchingIdentifier.profile_id,
             type:
-              identifier.identifier_type,
+              matchingIdentifier.identifier_type,
             value:
-              identifier.value,
+              matchingIdentifier.value,
           }
         : null,
     });
